@@ -97,6 +97,8 @@
 #include "hw/cxl/cxl_host.h"
 #include "qemu/guest-random.h"
 #include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
 #include <sys/types.h>
 
 static GlobalProperty arm_virt_compat_defaults[] = {
@@ -2625,12 +2627,24 @@ static void machvirt_init(MachineState *machine)
     vms->machine_done.notify = virt_machine_done;
     qemu_add_machine_init_done_notifier(&vms->machine_done);
 
-    //my stuff
+    /*
+    ************************
+    *   
+    *    MY STUFF
+    *
+    ************************
+    */
+
+    const char *qemu_src_dir = getenv("QEMU_SRC");
+
     MemoryRegion *my_flash = g_new(MemoryRegion, 1);
     memory_region_init_rom(my_flash, NULL, "my-spi-flash", 0x800000, &error_fatal);
     memory_region_add_subregion(get_system_memory(), 0x10000000, my_flash);
 
-    load_image_targphys("/home/stefano/.local/src/qemu/qemu/img/tenda.bin", 0x10000000, 0x800000, &error_fatal);
+    char tendaimgpath[256];
+    strcat(tendaimgpath, qemu_src_dir);
+    strcat(tendaimgpath, "/img/tenda.bin");
+    load_image_targphys(tendaimgpath, 0x10000000, 0x800000, &error_fatal);
 
     //dumb watchdog
     MemoryRegion *my_wdt_region = g_new(MemoryRegion, 1);
@@ -2642,14 +2656,21 @@ static void machvirt_init(MachineState *machine)
     memory_region_init_rom(f0_fix,NULL, "f0-fix", 0x4000, &error_fatal);
     memory_region_add_subregion(get_system_memory(), 0xf0000000, f0_fix);  
 
-    load_image_targphys("/home/stefano/.local/src/qemu/qemu/img/f0.img", 0xf0000000, 0x4000, &error_fatal);
+    char f0imgpath[256];
+    strcat(f0imgpath, qemu_src_dir);
+    strcat(f0imgpath, "/img/f0.img");
+    load_image_targphys(f0imgpath, 0xf0000000, 0x4000, &error_fatal);
 
     //0xf0c00000
     //NOTE: IT'S NOT TRULY RAM: some data do not change, writing to specific areas WILL CRASH THE ORIGINAL DEVICE
     MemoryRegion *f0c0_fix = g_new(MemoryRegion, 1);
     memory_region_init_ram(f0c0_fix,NULL, "f0c0-fix", vms->memmap[VIRT_F0].size, &error_fatal);
-    memory_region_add_subregion(get_system_memory(), 0xf0c00000, f0c0_fix);  
-    load_image_targphys("/home/stefano/.local/src/qemu/qemu/img/f0c0.img", 0xf0c00000, 0x4000, &error_fatal);
+    memory_region_add_subregion(get_system_memory(), 0xf0c00000, f0c0_fix);
+    
+    char f0c0imgpath[256];
+    strcat(f0c0imgpath, qemu_src_dir);
+    strcat(f0c0imgpath, "/img/f0c0.img");
+    load_image_targphys(f0c0imgpath, 0xf0c00000, 0x4000, &error_fatal);
 
     //GPIO1
     MemoryRegion *gpio1_fix = g_new(MemoryRegion, 1);
