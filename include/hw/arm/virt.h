@@ -83,6 +83,8 @@ enum {
     VIRT_PVTIME,
     VIRT_ACPI_PCIHP,
     VIRT_LOWMEMMAP_LAST,
+    VIRT_WDT,
+    VIRT_F0,
 };
 
 /* indices of IO regions located after the RAM */

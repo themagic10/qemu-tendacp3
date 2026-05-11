@@ -30,7 +30,7 @@
 #include "target/arm/cpu-qom.h"
 #include "qemu/log.h"
 
-#define VERSATILE_FLASH_ADDR 0x34000000
+#define VERSATILE_FLASH_ADDR 0x0
 #define VERSATILE_FLASH_SIZE (64 * 1024 * 1024)
 #define VERSATILE_FLASH_SECT_SIZE (256 * 1024)
 
@@ -225,7 +225,7 @@ static void versatile_init(MachineState *machine, int board_id)
 
     /* ??? RAM should repeat to fill physical memory space.  */
     /* SDRAM at address zero.  */
-    memory_region_add_subregion(sysmem, 0, machine->ram);
+    memory_region_add_subregion(sysmem, 0xa0000000, machine->ram);
 
     sysctl = qdev_new("realview_sysctl");
     qdev_prop_set_uint32(sysctl, "sys_id", 0x41007004);
@@ -280,7 +280,7 @@ static void versatile_init(MachineState *machine, int board_id)
         n--;
     }
 
-    pl011_create(0x101f1000, pic[12], serial_hd(0));
+    pl011_create(0xF0700000, pic[12], serial_hd(0));
     pl011_create(0x101f2000, pic[13], serial_hd(1));
     pl011_create(0x101f3000, pic[14], serial_hd(2));
     pl011_create(0x10009000, sic[6], serial_hd(3));

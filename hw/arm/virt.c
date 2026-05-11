@@ -42,7 +42,9 @@
 #include "hw/block/flash.h"
 #include "hw/display/ramfb.h"
 #include "net/net.h"
+#include "system/address-spaces.h"
 #include "system/device_tree.h"
+#include "system/memory.h"
 #include "system/numa.h"
 #include "system/runstate.h"
 #include "system/tpm.h"
@@ -94,6 +96,8 @@
 #include "hw/cxl/cxl.h"
 #include "hw/cxl/cxl_host.h"
 #include "qemu/guest-random.h"
+#include <stdio.h>
+#include <sys/types.h>
 
 static GlobalProperty arm_virt_compat_defaults[] = {
     { TYPE_VIRTIO_IOMMU_PCI, "aw-bits", "48" },
@@ -184,7 +188,7 @@ static const MemMapEntry base_memmap[] = {
     [VIRT_GIC_ITS] =            { 0x08080000, 0x00020000 },
     /* This redistributor space allows up to 2*64kB*123 CPUs */
     [VIRT_GIC_REDIST] =         { 0x080A0000, 0x00F60000 },
-    [VIRT_UART0] =              { 0x09000000, 0x00001000 },
+    [VIRT_UART0] =              { 0xf0700000, 0x00001000 },
     [VIRT_RTC] =                { 0x09010000, 0x00001000 },
     [VIRT_FW_CFG] =             { 0x09020000, 0x00000018 },
     [VIRT_GPIO] =               { 0x09030000, 0x00001000 },
@@ -204,7 +208,9 @@ static const MemMapEntry base_memmap[] = {
     [VIRT_PCIE_PIO] =           { 0x3eff0000, 0x00010000 },
     [VIRT_PCIE_ECAM] =          { 0x3f000000, 0x01000000 },
     /* Actual RAM size depends on initial RAM and device memory settings */
-    [VIRT_MEM] =                { GiB, LEGACY_RAMLIMIT_BYTES },
+    [VIRT_MEM] =                { 0xa0000000, 0x03000000 },
+    [VIRT_WDT] =                { 0xf0d00000, 0x00004000 },
+    [VIRT_F0] = { 0xf0000000, 0x00001000 },
 };
 
 /* Update the docs for highmem-mmio-size when changing this default */
@@ -2618,6 +2624,45 @@ static void machvirt_init(MachineState *machine)
 
     vms->machine_done.notify = virt_machine_done;
     qemu_add_machine_init_done_notifier(&vms->machine_done);
+
+    //my stuff
+    MemoryRegion *my_flash = g_new(MemoryRegion, 1);
+    memory_region_init_rom(my_flash, NULL, "my-spi-flash", 0x800000, &error_fatal);
+    memory_region_add_subregion(get_system_memory(), 0x10000000, my_flash);
+
+    load_image_targphys("/home/stefano/.local/src/qemu/qemu/img/tenda.bin", 0x10000000, 0x800000, &error_fatal);
+
+    //dumb watchdog
+    MemoryRegion *my_wdt_region = g_new(MemoryRegion, 1);
+    memory_region_init_ram(my_wdt_region, NULL, "wdt-stub", vms->memmap[VIRT_WDT].size, &error_fatal);
+    //for some reason vms->memmap[VIRT_WDT] returns 0x0, same result if i go for base_memmap directly... idk
+    memory_region_add_subregion(get_system_memory(), 0xf0d00000, my_wdt_region);
+    //0xf0000000
+    MemoryRegion *f0_fix = g_new(MemoryRegion, 1);
+    memory_region_init_rom(f0_fix,NULL, "f0-fix", 0x4000, &error_fatal);
+    memory_region_add_subregion(get_system_memory(), 0xf0000000, f0_fix);  
+
+    load_image_targphys("/home/stefano/.local/src/qemu/qemu/img/f0.img", 0xf0000000, 0x4000, &error_fatal);
+
+    //0xf0c00000
+    //NOTE: IT'S NOT TRULY RAM: some data do not change, writing to specific areas WILL CRASH THE ORIGINAL DEVICE
+    MemoryRegion *f0c0_fix = g_new(MemoryRegion, 1);
+    memory_region_init_ram(f0c0_fix,NULL, "f0c0-fix", vms->memmap[VIRT_F0].size, &error_fatal);
+    memory_region_add_subregion(get_system_memory(), 0xf0c00000, f0c0_fix);  
+    load_image_targphys("/home/stefano/.local/src/qemu/qemu/img/f0c0.img", 0xf0c00000, 0x4000, &error_fatal);
+
+    //GPIO1
+    MemoryRegion *gpio1_fix = g_new(MemoryRegion, 1);
+    memory_region_init_ram(gpio1_fix,NULL, "gpio1-fix", 0x4000, &error_fatal);
+    memory_region_add_subregion(get_system_memory(), 0xf4000000, gpio1_fix);  
+
+    //GPIO0
+    MemoryRegion *gpio0_fix = g_new(MemoryRegion, 1);
+    memory_region_init_ram(gpio0_fix,NULL, "gpio0-fix", 0x4000, &error_fatal);
+    memory_region_add_subregion(get_system_memory(), 0xf0300000, gpio0_fix);  
+
+
+
 }
 
 static bool virt_get_secure(Object *obj, Error **errp)
