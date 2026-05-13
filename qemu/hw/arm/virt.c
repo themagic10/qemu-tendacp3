@@ -2755,7 +2755,12 @@ static void machvirt_init(MachineState *machine)
     //GPIO0
     MemoryRegion *gpio0_fix = g_new(MemoryRegion, 1);
     memory_region_init_ram(gpio0_fix,NULL, "gpio0-fix", 0x4000, &error_fatal);
-    memory_region_add_subregion(get_system_memory(), 0xf0300000, gpio0_fix);  
+    memory_region_add_subregion(get_system_memory(), 0xf0300000, gpio0_fix);
+    
+    //FH_DMAC
+    MemoryRegion *fh_dmac_mr = g_new(MemoryRegion, 1);
+    memory_region_init_ram(fh_dmac_mr,NULL, "fh_dmac", 0x4000, &error_fatal);
+    memory_region_add_subregion(get_system_memory(), 0xe0300000, fh_dmac_mr);
 
 
 

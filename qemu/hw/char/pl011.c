@@ -330,6 +330,9 @@ static uint64_t pl011_read(void *opaque, hwaddr offset,
     case 18: /* UARTDMACR */
         r = s->dmacr;
         break;
+    case 31: //REALLY REALLY UGLY PATCH FOR TENDA. I HATE THIS SO MUCH
+        return 0x01;
+        break;
     case 0x3f8 ... 0x400:
         r = s->id[(offset - 0xfe0) >> 2];
         break;
