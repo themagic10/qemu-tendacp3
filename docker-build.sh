@@ -1,1 +1,1 @@
-docker build . -t magic/tendacp3qemu
+docker build . -t magic/tendacp3qemu --network host

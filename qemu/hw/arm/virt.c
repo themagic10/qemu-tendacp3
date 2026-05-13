@@ -101,6 +101,77 @@
 #include <string.h>
 #include <sys/types.h>
 
+// custom mmio's
+
+#include "qemu/osdep.h"
+#include "qemu/timer.h"
+#include "system/memory.h"
+
+#define FULLHAN_TIMER_RATE_HZ   100000000UL   /* 0x05F5E100 */
+#define FULLHAN_TIMER_LOOP    0x100
+#define FULLHAN_TIMER_SIZE    0X4000
+
+typedef struct {
+    uint64_t start_ns;     /* virtual-time origin for this channel */
+    uint32_t load;         /* value the counter started at */
+    uint32_t control;      /* mirror of last write to +0x08 */
+    bool     running;
+    uint32_t rate_hz;
+} FhTimer;
+
+static uint64_t fullhan_timer_get(FhTimer *t){
+    if (t->running){
+        uint64_t current_time = qemu_clock_get_ns(QEMU_CLOCK_VIRTUAL);
+        uint64_t elapsed = current_time - t->start_ns;
+        uint64_t ticks = (elapsed * (uint64_t)t->rate_hz) / 1000000000ULL;
+        return t->load - (uint32_t)ticks;
+    }
+    fprintf(stderr, "TRYING TO GET VALUE OF FULLHAN TIMER THAT HASN'T STARTED YET");
+    return 0;
+}
+
+//note: in memory.h the memoryregionops requires first argument to be void* opaque...
+static uint64_t f0c0_read(void *opaque, hwaddr addr, unsigned size){
+    FhTimer *t = opaque;
+    hwaddr r = addr % FULLHAN_TIMER_LOOP;
+
+    switch (r) {
+    case 0x00: return t->rate_hz;
+    case 0x04: return fullhan_timer_get(t);
+    case 0x08: return t->control;
+    case 0xAC: return 0x3230382Au;          /* "*802" LE — keep your dump happy */
+    default:   return 0;
+    }
+}
+
+static void f0c0_write(void *opaque, hwaddr addr, uint64_t data, unsigned size) {
+    
+}
+
+MemoryRegionOps f0c0_region_ops = {
+    .read = f0c0_read,
+    .write = f0c0_write,
+    .endianness = DEVICE_LITTLE_ENDIAN,
+    .impl = { .min_access_size = 4, .max_access_size = 4 },
+    .valid = { .min_access_size = 1, .max_access_size = 4 },
+};
+
+static void init_fh_timer(MemoryRegion *mem, hwaddr addr){
+    FhTimer *t = g_new0(FhTimer, 1);
+    MemoryRegion *mr = g_new0(MemoryRegion, 1);
+    uint64_t now = qemu_clock_get_ns(QEMU_CLOCK_VIRTUAL);
+
+    t->rate_hz = FULLHAN_TIMER_RATE_HZ;
+    t->load     = 0xFFFFFFFFu;
+    t->control  = 5;              
+    t->running  = true;
+    t->start_ns = now;
+
+    memory_region_init_io(mr, NULL, &f0c0_region_ops, t,
+                          "fullhan-timer", FULLHAN_TIMER_SIZE);
+    memory_region_add_subregion(mem, addr, mr);
+}
+
 static GlobalProperty arm_virt_compat_defaults[] = {
     { TYPE_VIRTIO_IOMMU_PCI, "aw-bits", "48" },
 };
@@ -2663,6 +2734,9 @@ static void machvirt_init(MachineState *machine)
 
     //0xf0c00000
     //NOTE: IT'S NOT TRULY RAM: some data do not change, writing to specific areas WILL CRASH THE ORIGINAL DEVICE
+
+    init_fh_timer(get_system_memory(), 0xf0c00000ULL);
+    /*
     MemoryRegion *f0c0_fix = g_new(MemoryRegion, 1);
     memory_region_init_ram(f0c0_fix,NULL, "f0c0-fix", vms->memmap[VIRT_F0].size, &error_fatal);
     memory_region_add_subregion(get_system_memory(), 0xf0c00000, f0c0_fix);
@@ -2671,6 +2745,7 @@ static void machvirt_init(MachineState *machine)
     strcat(f0c0imgpath, qemu_src_dir);
     strcat(f0c0imgpath, "/img/f0c0.img");
     load_image_targphys(f0c0imgpath, 0xf0c00000, 0x4000, &error_fatal);
+    */
 
     //GPIO1
     MemoryRegion *gpio1_fix = g_new(MemoryRegion, 1);

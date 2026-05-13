@@ -22,16 +22,3 @@ WORKDIR $QEMU_SRC
 
 # building
 RUN ./configure --disable-kvm --target-list="arm-softmmu"
-
-RUN make -j$(nproc)
-
-
-WORKDIR $QEMU_ROOT
-
-CMD $QEMU_SRC/build/qemu-system-arm -s -S -M virt \
-	-cpu cortex-a15 \
-	-m 48M \
-	-d int,mmu,guest_errors -D errvirdump.log \
-	-device loader,file=$QEMU_IMAGES/uboot.dd,addr=0xa0800000 \
-	-device loader,addr=0xa0800000,cpu-num=0 \
-	-serial stdio
