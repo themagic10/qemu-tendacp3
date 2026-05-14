@@ -20,5 +20,10 @@ COPY qemu $QEMU_SRC
 
 WORKDIR $QEMU_SRC
 
+RUN useradd -m -u 1000 devel
+
+USER devel
+
 # building
 RUN ./configure --disable-kvm --target-list="arm-softmmu"
+

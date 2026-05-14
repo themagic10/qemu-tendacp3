@@ -330,8 +330,13 @@ static uint64_t pl011_read(void *opaque, hwaddr offset,
     case 18: /* UARTDMACR */
         r = s->dmacr;
         break;
+        /*
+            for more info: https://linux-sunxi.org/images/d/d2/Dw_apb_uart_db.pdf
+            
+            tldr: if bit 0 is set fifo it's full, if bit 1 is set fifo is NOT full
+        */
     case 31: //REALLY REALLY UGLY PATCH FOR TENDA. I HATE THIS SO MUCH
-        return 0x01;
+        return 0x02;
         break;
     case 0x3f8 ... 0x400:
         r = s->id[(offset - 0xfe0) >> 2];
