@@ -2758,9 +2758,21 @@ static void machvirt_init(MachineState *machine)
     memory_region_add_subregion(get_system_memory(), 0xf0300000, gpio0_fix);
     
     //FH_DMAC
+
     MemoryRegion *fh_dmac_mr = g_new(MemoryRegion, 1);
     memory_region_init_ram(fh_dmac_mr,NULL, "fh_dmac", 0x4000, &error_fatal);
     memory_region_add_subregion(get_system_memory(), 0xe0300000, fh_dmac_mr);
+
+    //FH_SPI0
+    MemoryRegion *fh_spi0_mem = g_new(MemoryRegion, 1);
+    memory_region_init_ram(fh_spi0_mem,NULL, "fh_spi0_mem", 0x4000, &error_fatal);
+    memory_region_add_subregion(get_system_memory(), 0xf0e00000, fh_spi0_mem);
+
+
+    char fh_spi0_img_path[256];
+    strcat(fh_spi0_img_path, qemu_src_dir);
+    strcat(fh_spi0_img_path, "/img/spi_0_mem_test.img");
+    load_image_targphys(fh_spi0_img_path, 0xf0c00000, 0x4000, &error_fatal);
 
 
 
