@@ -139,7 +139,7 @@ static uint64_t f0c0_read(void *opaque, hwaddr addr, unsigned size){
     case 0x00: return t->rate_hz;
     case 0x04: return fullhan_timer_get(t);
     case 0x08: return t->control;
-    case 0xAC: return 0x3230382Au;          /* "*802" LE — keep your dump happy */
+    case 0xAC: return 0x3230382Au;
     default:   return 0;
     }
 }
@@ -171,6 +171,65 @@ static void init_fh_timer(MemoryRegion *mem, hwaddr addr){
                           "fullhan-timer", FULLHAN_TIMER_SIZE);
     memory_region_add_subregion(mem, addr, mr);
 }
+
+/*
+    DESIGNWARE SPI MASTER CONTROLLER
+*/
+
+#define SPI_MMIO_LOOP 2000
+#define SSI_VERSION_ID 0x2a323233
+#define DW_SPI_MMIO_SIZE 0x4000
+
+#define DW_CTRL_0 0xc7020000
+#define DW_ID_CODE 0xffffffff
+
+typedef struct {
+    uint32_t ctrl_0;
+    uint32_t id_code;
+} dw_spi_master_status;
+
+static uint64_t dw_spi_master_read(void *opaque, hwaddr addr, unsigned size){
+    dw_spi_master_status *dw = opaque;
+    hwaddr true_addr = addr % 2000;
+
+    switch (true_addr) {
+    case 0x00: return dw->ctrl_0;
+    //this should fix the loop at 0xa081f4ac
+    //bit 2 must be set, bit 0 must be unset or we're stuck in a loop
+    case 0x28: return 0x00000006;
+    case 0x5c: return SSI_VERSION_ID;
+    default:   return 0;
+    }
+}
+
+static void dw_spi_master_write(void *opaque, hwaddr addr, uint64_t data, unsigned size) {
+    
+}
+
+MemoryRegionOps dw_spi_region_ops = {
+    .read = dw_spi_master_read,
+    .write = dw_spi_master_write,
+    .endianness = DEVICE_LITTLE_ENDIAN,
+    .impl = { .min_access_size = 4, .max_access_size = 4 },
+    .valid = { .min_access_size = 1, .max_access_size = 4 },
+};
+
+static void init_dw_spi_master(MemoryRegion *mem, hwaddr addr){
+    dw_spi_master_status *dw = g_new0(dw_spi_master_status, 1);
+    dw->ctrl_0 = DW_CTRL_0;
+    dw->id_code = DW_ID_CODE;
+    MemoryRegion *mr = g_new0(MemoryRegion, 1);
+
+    memory_region_init_io(mr, NULL, &dw_spi_region_ops, dw,
+                          "dw_spi_master", DW_SPI_MMIO_SIZE);
+    memory_region_add_subregion(mem, addr, mr);
+}
+
+/*
+
+------------------------------------------
+
+*/
 
 static GlobalProperty arm_virt_compat_defaults[] = {
     { TYPE_VIRTIO_IOMMU_PCI, "aw-bits", "48" },
@@ -2764,6 +2823,10 @@ static void machvirt_init(MachineState *machine)
     memory_region_add_subregion(get_system_memory(), 0xe0300000, fh_dmac_mr);
 
     //FH_SPI0
+
+    init_dw_spi_master(get_system_memory(), 0xf0e00000ULL);
+
+    /*
     MemoryRegion *fh_spi0_mem = g_new(MemoryRegion, 1);
     memory_region_init_ram(fh_spi0_mem,NULL, "fh_spi0_mem", 0x4000, &error_fatal);
     memory_region_add_subregion(get_system_memory(), 0xf0e00000, fh_spi0_mem);
@@ -2773,7 +2836,7 @@ static void machvirt_init(MachineState *machine)
     strcat(fh_spi0_img_path, qemu_src_dir);
     strcat(fh_spi0_img_path, "/img/spi_0_mem_test.img");
     load_image_targphys(fh_spi0_img_path, 0xf0c00000, 0x4000, &error_fatal);
-
+    */
 
 
 }
