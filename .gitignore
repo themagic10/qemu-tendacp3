@@ -1,4 +1,7 @@
 .vscode/
+.devcontainer/
+.cache/
+
 
 build/
 
