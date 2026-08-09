@@ -28,8 +28,11 @@
  * This is essentially the same approach kvmtool uses.
  */
 
+
+
 #include "qemu/osdep.h"
 #include "qemu/datadir.h"
+#include "qemu/typedefs.h"
 #include "qemu/units.h"
 #include "qemu/option.h"
 #include "qemu/target-info.h"
@@ -43,6 +46,7 @@
 #include "hw/display/ramfb.h"
 #include "net/net.h"
 #include "system/address-spaces.h"
+#include "system/blockdev.h"
 #include "system/device_tree.h"
 #include "system/memory.h"
 #include "system/numa.h"
@@ -100,6 +104,9 @@
 #include <stdlib.h>
 #include <string.h>
 #include <sys/types.h>
+#include "hw/ssi/ssi.h"
+#include "hw/core/boards.h"
+#include "hw/core/qdev.h"
 
 // custom mmio's
 
@@ -176,53 +183,25 @@ static void init_fh_timer(MemoryRegion *mem, hwaddr addr){
     DESIGNWARE SPI MASTER CONTROLLER
 */
 
-#define SPI_MMIO_LOOP 2000
-#define SSI_VERSION_ID 0x2a323233
-#define DW_SPI_MMIO_SIZE 0x4000
+#define FH_SPI_0_BASE 0xf0e00000
 
-#define DW_CTRL_0 0xc7020000
-#define DW_ID_CODE 0xffffffff
-
-typedef struct {
-    uint32_t ctrl_0;
-    uint32_t id_code;
-} dw_spi_master_status;
-
-static uint64_t dw_spi_master_read(void *opaque, hwaddr addr, unsigned size){
-    dw_spi_master_status *dw = opaque;
-    hwaddr true_addr = addr % 2000;
-
-    switch (true_addr) {
-    case 0x00: return dw->ctrl_0;
-    //this should fix the loop at 0xa081f4ac
-    //bit 2 must be set, bit 0 must be unset or we're stuck in a loop
-    case 0x28: return 0x00000006;
-    case 0x5c: return SSI_VERSION_ID;
-    default:   return 0;
-    }
-}
-
-static void dw_spi_master_write(void *opaque, hwaddr addr, uint64_t data, unsigned size) {
+static void fullhan_init_spi_master(MachineState *mc, qemu_irq spi_irq){
+    DeviceState *spi = qdev_new("dw-spi");
     
-}
+    sysbus_realize_and_unref(SYS_BUS_DEVICE(spi), &error_fatal);
+    sysbus_mmio_map(SYS_BUS_DEVICE(spi), 0, FH_SPI_0_BASE);
+    sysbus_connect_irq(SYS_BUS_DEVICE(spi), 0, spi_irq);
 
-MemoryRegionOps dw_spi_region_ops = {
-    .read = dw_spi_master_read,
-    .write = dw_spi_master_write,
-    .endianness = DEVICE_LITTLE_ENDIAN,
-    .impl = { .min_access_size = 4, .max_access_size = 4 },
-    .valid = { .min_access_size = 1, .max_access_size = 4 },
-};
-
-static void init_dw_spi_master(MemoryRegion *mem, hwaddr addr){
-    dw_spi_master_status *dw = g_new0(dw_spi_master_status, 1);
-    dw->ctrl_0 = DW_CTRL_0;
-    dw->id_code = DW_ID_CODE;
-    MemoryRegion *mr = g_new0(MemoryRegion, 1);
-
-    memory_region_init_io(mr, NULL, &dw_spi_region_ops, dw,
-                          "dw_spi_master", DW_SPI_MMIO_SIZE);
-    memory_region_add_subregion(mem, addr, mr);
+    //flash device, wiring m25p80 into virt
+    DriveInfo *di = drive_get(IF_MTD, 0, 0);
+    // using "m25p80" will result in a 8mbit flash, thanks qemu!
+    DeviceState *flash = qdev_new("w25q64");
+    if (di){
+        qdev_prop_set_drive_err(flash, "drive", blk_by_legacy_dinfo(di), &error_fatal);
+    }
+    qdev_realize_and_unref(flash, BUS(qdev_get_child_bus(spi, "ssi")), &error_fatal);
+    qemu_irq flash_cs = qdev_get_gpio_in_named(flash, SSI_GPIO_CS, 0);
+    qdev_connect_gpio_out_named(spi, SSI_GPIO_CS, 0, flash_cs);
 }
 
 /*
@@ -2823,8 +2802,8 @@ static void machvirt_init(MachineState *machine)
     memory_region_add_subregion(get_system_memory(), 0xe0300000, fh_dmac_mr);
 
     //FH_SPI0
-
-    init_dw_spi_master(get_system_memory(), 0xf0e00000ULL);
+    fullhan_init_spi_master(MACHINE(vms), 0);
+    
 
     /*
     MemoryRegion *fh_spi0_mem = g_new(MemoryRegion, 1);

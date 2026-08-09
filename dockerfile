@@ -34,4 +34,5 @@ CMD $QEMU_SRC/build/qemu-system-arm -s -S -M virt \
 	-d int,mmu,guest_errors -D errvirdump.log \
 	-device loader,file=$QEMU_IMAGES/uboot.dd,addr=0xa0800000 \
 	-device loader,addr=0xa0800000,cpu-num=0 \
+	-drive file=$QEMU_IMAGES/firmware.bin,format=raw,if=mtd \
 	-serial stdio

@@ -2,6 +2,7 @@
 .devcontainer/
 .cache/
 
+qemu/.clangd
 
 build/
 
