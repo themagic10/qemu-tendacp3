@@ -53,13 +53,15 @@ OBJECT_DECLARE_SIMPLE_TYPE(DWSPIState, DW_SPI)
 #define DW_SPI_VERSION		    0x5c
 #define DW_SPI_DR_BASE			0x60
 #define DW_SPI_DR_END			0xec
+//these are effectively fake... the device will not respect them, those addresses
+//are most likely vendor registers (possibily with the physical location on the bus for the flash)
 #define DW_SPI_RX_SAMPLE_DLY	0xf0
 #define DW_SPI_CS_OVERRIDE	    0xf4
 #define DW_RESERVED             0xfc
 
 //unknown regs, not in the documents...
-#define VENDOR_BASE             0x100
-#define VENDOR_END              0xfff
+#define VENDOR_BASE             0xf0
+#define VENDOR_END              0xfff // overkill but who cares?
 #define VENDOR_NREG (((VENDOR_END - VENDOR_BASE)/4) + 1)
 
 // data frame size
@@ -79,9 +81,19 @@ transmission mode:
 #define TMOD_RX 2
 #define TMOD_EEPROM 3
 
+/* sr: status register */
+#define SR_TFNF 1<<1 //transmit fifo not full
+#define SR_TFE  1<<2 //transmit fifo empty
+#define SR_RFNE 1<<3 //recieve fifo not empty
+#define SR_RFF  1<<4 //recieve fifo full
+#define SR_TXE  1<<5 //transmission error
+#define SR_DCOL 1<<6 //data collision
+
+
 #define VERSION 0x3332322a
 #define MAX_DATA_REGS 36
 #define MAX_SLAVE 16 //should be 31 according to the docs
+#define MAX_FIFO 256 //arbitrary, fifo shouldn't be that big on a real device..
  
 struct DWSPIState {
     SysBusDevice parent_obj;
@@ -92,7 +104,7 @@ struct DWSPIState {
 
     // regs
     uint32_t ctrlr0;
-    uint32_t ctrlr1; //ndf, number of data frames
+    uint32_t ctrlr1; 
     uint32_t ssienr; //ssi enable register
 
     uint32_t mwcr;
@@ -101,10 +113,12 @@ struct DWSPIState {
     uint32_t txftlr;
     uint32_t rxftlr;
     uint32_t imr;
+
     uint32_t dmacr;
     uint32_t dmatdlr;
     uint32_t dmardlr;
     uint32_t idr;
+
     uint32_t vendor[VENDOR_NREG];
     
     uint16_t dr[MAX_DATA_REGS]; //assuming SSI_MAX_XFER_SIZE is 16 (it is)
@@ -112,9 +126,13 @@ struct DWSPIState {
     bool hasselectedchip;
     uint32_t selected_cs;
 
-    
-    
+    /* rx only/eeprom */
+    uint32_t rx_left;
 
+    /* fifo */
+    uint16_t fifo[MAX_FIFO];
+    uint32_t fifo_head;
+    uint32_t fifo_len;
 };
 
 static void evaluatecs(DWSPIState* s){
@@ -133,22 +151,36 @@ static uint32_t transfer(DWSPIState *s, uint32_t data){
     return rx;
 }
 
+static void fifo_push_data(DWSPIState *s, uint32_t data){
+    uint32_t val = transfer(s, data);
+    //tail = head + len
+    s->fifo[s->fifo_head + s->fifo_len] = val;
+    s->fifo_len++;
+}
+
+static void dw_spi_flush(DWSPIState *s){
+    s->fifo_head = 0;
+    s->fifo_len = 0;
+    s->rx_left = 0;
+}
+
 /*  DATA REGISTERS  */
 static uint32_t dw_spi_read(DWSPIState *s){
 
     uint32_t ret;
-
-    if (CTRL0_TMOD(s->ctrlr0) == TMOD_TX_RX){
-        hw_error("dw_spi: using txrx tmod, i havent implemented that yet");        
-    }
     
-    if (s->ctrlr1){
+    if (s->fifo_len){
+        ret = s->fifo[s->fifo_head];
+        s->fifo_head++;
+        s->fifo_len--;
+    }
+    else if (s->rx_left){
         if (!s->hasselectedchip){
             error_report("dw spi: tried to read in rx/eprom without cs");
-            return 0xffff;
+            return 0xffffffff;
         }
         ret = transfer(s, 0xffff);
-        s->ctrlr1--;
+        s->rx_left--;
     }
     else {
         ret = 0xffffffff;
@@ -159,6 +191,31 @@ static uint32_t dw_spi_read(DWSPIState *s){
 
 }
 static void dw_spi_write(DWSPIState *s, uint32_t val){
+    uint32_t ndf = s->ctrlr1 + 1;
+    if (!s->ssienr){
+        error_report("dw spi: trying to write to data register without setting ssienr, forbidden");
+        return;
+    }
+    if (!s->hasselectedchip){
+        error_report("dw spi: write to dr without selected cs, evaluating on the spot...");
+        evaluatecs(s);
+    }
+    switch (CTRL0_TMOD(s->ctrlr0)) {
+        case TMOD_TX_RX:
+            fifo_push_data(s, val);
+            break;
+        case TMOD_RX:
+            if (!s->rx_left){
+                s->rx_left = ndf;
+            }
+            break;
+        case TMOD_TX:
+            transfer(s, val);
+            break;
+        case TMOD_EEPROM:
+            hw_error("writing in eeprom mode, not implemented");
+            break;
+    }
 
 }
 
@@ -176,11 +233,26 @@ static uint64_t dw_spi_reg_read(void *opaque, hwaddr addr, unsigned size){
     }
 
     if (addr >= VENDOR_BASE && addr <= VENDOR_END){
-        return 0xdeadbeef;
+        return s->vendor[addr<<2];
     }
 
     switch (addr) {
-    
+        case DW_SPI_CTRLR0: ret = s->ctrlr0; break;
+        case DW_SPI_CTRLR1: ret = s->ctrlr1; break;
+        case DW_SPI_SSIENR: ret = s->ssienr; break;
+        case DW_SPI_SER: ret = s->ser; break;
+        case DW_SPI_BAUDR: ret = s->baudr; break;
+        case DW_SPI_TXFTLR: ret = s->txftlr; break;
+        case DW_SPI_RXFTLR: ret = s->rxftlr; break;
+        case DW_SPI_TXFLR: ret = 0; break; // we consume tx instantly
+        case DW_SPI_RXFLR: ret = s->fifo_len + s->rx_left; break;
+        case DW_SPI_SR:
+            ret = SR_TFNF | SR_TFE; // fifo not full
+            break;
+        case DW_SPI_IMR: ret = s->imr; break;
+        default:
+            error_report("dw spi: reading unimplemented register %X", addr);
+            break;
     }
     return ret;
 
@@ -191,24 +263,48 @@ static void dw_spi_reg_write(void *opaque, hwaddr addr, uint64_t value, unsigned
         return;
     }
 
+    if (addr >= DW_SPI_DR_BASE && addr <= DW_SPI_DR_END){
+        dw_spi_write(s, value & 0xffffffff);
+        return;
+    }
+
+    if (addr >= VENDOR_BASE && addr <= VENDOR_END){
+        s->vendor[addr<<2] = value & 0xffffffff;
+        return;
+    }
+
     switch (addr) {
         case DW_SPI_CTRLR0:
             if (!s->ssienr){
                 error_report("dw spi: writing to ctrl0 without setting ssienr");
             }
-            s->ctrlr0 = value;
+            s->ctrlr0 = value & 0xffffffff;
             break;
         case DW_SPI_CTRLR1:
             s->ctrlr1 = value & 0xffff;
             break;
         case DW_SPI_SSIENR:
-            //TODO: FIFO BUFFERS ARE FLUSHED WHEN DISABLING
             s->ssienr = value & 0x1;
+            if (!s->ssienr){
+                dw_spi_flush(s);
+            }
             break;
         case DW_SPI_SER:
             //violates the reserved bits but i really dont care
             s->ser = value;
             evaluatecs(s);
+            break;
+        case DW_SPI_BAUDR:
+            s->baudr = value;
+            break;
+        case DW_SPI_TXFTLR:
+            s->txftlr = value;
+            break;
+        case DW_SPI_RXFTLR:
+            s->rxftlr = value;
+            break;
+        case DW_SPI_IMR:
+            s->imr = value;
             break;
         default:
             error_report("dw spi: writing to unimplemented register");
