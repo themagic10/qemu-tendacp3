@@ -30,6 +30,7 @@
 
 
 
+
 #include "qemu/osdep.h"
 #include "qemu/datadir.h"
 #include "qemu/typedefs.h"
@@ -107,6 +108,7 @@
 #include "hw/ssi/ssi.h"
 #include "hw/core/boards.h"
 #include "hw/core/qdev.h"
+#include "hw/char/serial-mm.h"
 
 // custom mmio's
 
@@ -195,13 +197,26 @@ static void fullhan_init_spi_master(MachineState *mc, qemu_irq spi_irq){
     //flash device, wiring m25p80 into virt
     DriveInfo *di = drive_get(IF_MTD, 0, 0);
     // using "m25p80" will result in a 8mbit flash, thanks qemu!
-    DeviceState *flash = qdev_new("w25q64");
+    DeviceState *flash = qdev_new("by25q64as");
     if (di){
         qdev_prop_set_drive_err(flash, "drive", blk_by_legacy_dinfo(di), &error_fatal);
     }
     qdev_realize_and_unref(flash, BUS(qdev_get_child_bus(spi, "ssi")), &error_fatal);
     qemu_irq flash_cs = qdev_get_gpio_in_named(flash, SSI_GPIO_CS, 0);
     qdev_connect_gpio_out_named(spi, SSI_GPIO_CS, 0, flash_cs);
+}
+
+/* dmac */
+
+#define FH_DMAC_0_BASE 0xe0300000
+
+static void dw_dmac_create(MachineState *mc){
+
+    DeviceState *dev = qdev_new("dw-dmac");
+    SysBusDevice *sbd = SYS_BUS_DEVICE(dev);
+    sysbus_realize_and_unref(sbd, &error_fatal);
+    sysbus_mmio_map(sbd, 0, FH_DMAC_0_BASE);
+
 }
 
 /*
@@ -2770,6 +2785,9 @@ static void machvirt_init(MachineState *machine)
     strcat(f0imgpath, "/img/f0.img");
     load_image_targphys(f0imgpath, 0xf0000000, 0x4000, &error_fatal);
 
+    /* DW_DMAC */
+    dw_dmac_create(MACHINE(vms));
+
     //0xf0c00000
     //NOTE: IT'S NOT TRULY RAM: some data do not change, writing to specific areas WILL CRASH THE ORIGINAL DEVICE
 
@@ -2794,16 +2812,12 @@ static void machvirt_init(MachineState *machine)
     MemoryRegion *gpio0_fix = g_new(MemoryRegion, 1);
     memory_region_init_ram(gpio0_fix,NULL, "gpio0-fix", 0x4000, &error_fatal);
     memory_region_add_subregion(get_system_memory(), 0xf0300000, gpio0_fix);
-    
-    //FH_DMAC
-
-    MemoryRegion *fh_dmac_mr = g_new(MemoryRegion, 1);
-    memory_region_init_ram(fh_dmac_mr,NULL, "fh_dmac", 0x4000, &error_fatal);
-    memory_region_add_subregion(get_system_memory(), 0xe0300000, fh_dmac_mr);
 
     //FH_SPI0
     fullhan_init_spi_master(MACHINE(vms), 0);
     
+    //alternative uart
+    //serial_mm_init(get_system_memory(), 0xF0700000, 2, NULL, 115200, serial_hd(0), DEVICE_LITTLE_ENDIAN);
 
     /*
     MemoryRegion *fh_spi0_mem = g_new(MemoryRegion, 1);

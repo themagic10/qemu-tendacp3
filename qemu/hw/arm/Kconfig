@@ -37,6 +37,7 @@ config ARM_VIRT
     select ACPI_CXL
     select ACPI_HMAT
     select DW_SPI
+    select DW_DMAC
 
 config CUBIEBOARD
     bool

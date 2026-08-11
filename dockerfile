@@ -1,6 +1,6 @@
 FROM debian:12
 
-EXPOSE 1234
+EXPOSE 1234 8888
 
 ENV QEMU_ROOT="/qemuroot"
 ENV QEMU_SRC="$QEMU_ROOT/qemu"
@@ -31,8 +31,8 @@ WORKDIR $QEMU_ROOT
 CMD $QEMU_SRC/build/qemu-system-arm -s -S -M virt \
 	-cpu cortex-a15 \
 	-m 48M \
-	-d int,mmu,guest_errors -D errvirdump.log \
+	-d unimp,int,mmu,guest_errors -D errvirdump.log \
 	-device loader,file=$QEMU_IMAGES/uboot.dd,addr=0xa0800000 \
 	-device loader,addr=0xa0800000,cpu-num=0 \
 	-drive file=$QEMU_IMAGES/firmware.bin,format=raw,if=mtd \
-	-serial stdio
+	-serial stdio -monitor telnet:0.0.0.0:8888,server,nowait

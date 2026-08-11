@@ -17,6 +17,7 @@
 #include "hw/core/sysbus.h"
 #include "system/memory.h"
 #include "hw/core/qdev.h"
+#include "qemu/log.h"
 
 #define TYPE_DW_SPI "dw-spi"
 OBJECT_DECLARE_SIMPLE_TYPE(DWSPIState, DW_SPI)
@@ -183,6 +184,7 @@ static uint32_t dw_spi_read(DWSPIState *s){
         s->rx_left--;
     }
     else {
+        //error_report("ssi no fifo or rx data... cs=%d rx_left=%u fifo_len=%u", s->hasselectedchip, s->rx_left, s->fifo_len);
         ret = 0xffffffff;
     }
 
@@ -193,8 +195,7 @@ static uint32_t dw_spi_read(DWSPIState *s){
 static void dw_spi_write(DWSPIState *s, uint32_t val){
     uint32_t ndf = s->ctrlr1 + 1;
     if (!s->ssienr){
-        error_report("dw spi: trying to write to data register without setting ssienr, forbidden");
-        return;
+        error_report("dw spi: trying to write to data register without setting ssienr, allowing but come on...");
     }
     if (!s->hasselectedchip){
         error_report("dw spi: write to dr without selected cs, evaluating on the spot...");
@@ -224,11 +225,11 @@ static void dw_spi_write(DWSPIState *s, uint32_t val){
 static uint64_t dw_spi_reg_read(void *opaque, hwaddr addr, unsigned size){
     DWSPIState *s = opaque;
     uint32_t ret = 0;
-    if (addr > 0x1000){
-        return 0xffffffff;
+    if (addr >= 0x2000){
+        addr = addr % 0x2000;
     }
 
-    if (addr >= DW_SPI_DR_BASE && addr <= DW_SPI_DR_END){
+    if ((addr >= DW_SPI_DR_BASE && addr <= DW_SPI_DR_END) || (addr >= 0x1000 && addr<0x2000)){
         return dw_spi_read(s);
     }
 
@@ -240,12 +241,14 @@ static uint64_t dw_spi_reg_read(void *opaque, hwaddr addr, unsigned size){
         case DW_SPI_CTRLR0: ret = s->ctrlr0; break;
         case DW_SPI_CTRLR1: ret = s->ctrlr1; break;
         case DW_SPI_SSIENR: ret = s->ssienr; break;
+        case DW_SPI_MWCR: ret = s->mwcr; break;
         case DW_SPI_SER: ret = s->ser; break;
         case DW_SPI_BAUDR: ret = s->baudr; break;
         case DW_SPI_TXFTLR: ret = s->txftlr; break;
         case DW_SPI_RXFTLR: ret = s->rxftlr; break;
         case DW_SPI_TXFLR: ret = 0; break; // we consume tx instantly
         case DW_SPI_RXFLR: ret = s->fifo_len + s->rx_left; break;
+        case DW_SPI_DMACR: ret = s->dmacr; break;
         case DW_SPI_SR:
             ret = SR_TFNF | SR_TFE; // fifo not full
             break;
@@ -259,11 +262,12 @@ static uint64_t dw_spi_reg_read(void *opaque, hwaddr addr, unsigned size){
 }
 static void dw_spi_reg_write(void *opaque, hwaddr addr, uint64_t value, unsigned size){
     DWSPIState *s = opaque;
-    if (addr > 0x1000){
-        return;
+    if (addr >= 0x2000){
+        addr = addr % 0x2000;
     }
 
-    if (addr >= DW_SPI_DR_BASE && addr <= DW_SPI_DR_END){
+
+    if ((addr >= DW_SPI_DR_BASE && addr <= DW_SPI_DR_END) || (addr>=0x1000 && addr<0x2000)){
         dw_spi_write(s, value & 0xffffffff);
         return;
     }
@@ -276,7 +280,7 @@ static void dw_spi_reg_write(void *opaque, hwaddr addr, uint64_t value, unsigned
     switch (addr) {
         case DW_SPI_CTRLR0:
             if (!s->ssienr){
-                error_report("dw spi: writing to ctrl0 without setting ssienr");
+                qemu_log_mask(LOG_GUEST_ERROR,"dw spi: writing to ctrl0 without setting ssienr");
             }
             s->ctrlr0 = value & 0xffffffff;
             break;
@@ -288,6 +292,9 @@ static void dw_spi_reg_write(void *opaque, hwaddr addr, uint64_t value, unsigned
             if (!s->ssienr){
                 dw_spi_flush(s);
             }
+            break;
+        case DW_SPI_MWCR:
+            s->mwcr = value;
             break;
         case DW_SPI_SER:
             //violates the reserved bits but i really dont care
@@ -302,6 +309,12 @@ static void dw_spi_reg_write(void *opaque, hwaddr addr, uint64_t value, unsigned
             break;
         case DW_SPI_RXFTLR:
             s->rxftlr = value;
+            break;
+        case DW_SPI_DMACR:
+            s->dmacr = value;
+            break;
+        case DW_SPI_DMARDLR:
+            s->dmardlr = value;
             break;
         case DW_SPI_IMR:
             s->imr = value;
@@ -322,7 +335,7 @@ static const MemoryRegionOps dw_spi_ops = {
     .read = dw_spi_reg_read,
     .write = dw_spi_reg_write,
     .endianness = DEVICE_LITTLE_ENDIAN,
-    .valid.min_access_size = 4,
+    .valid.min_access_size = 1, // or the dma will fail :)
     .valid.max_access_size = 4,
 };
 
@@ -333,8 +346,9 @@ static void dw_spi_realize(DeviceState* dev, Error **errp){
     SysBusDevice *sdb = SYS_BUS_DEVICE(dev);
     DWSPIState *s = DW_SPI(dev);
 
+    // the subroutine that loads the kernel actually reads from offset 0x1000
     memory_region_init_io(&s->iomem, OBJECT(s), &dw_spi_ops, 
-        s, "dw-spi", 0x1000);
+        s, "dw-spi", 0x8000); // todo check true size
     sysbus_init_mmio(sdb, &s->iomem);
     sysbus_init_irq(sdb, &s->irq);
     s->bus = ssi_create_bus(dev, "ssi");
@@ -349,11 +363,9 @@ static void dw_spi_reset(DeviceState *dev){
     s->ctrlr1 = 0;
     s->ssienr = 0;
     s->ser = 0;
-
 }
 
-static void dw_spi_class_init(ObjectClass *klass, const void *data)
-{
+static void dw_spi_class_init(ObjectClass *klass, const void *data){
     DeviceClass *dc = DEVICE_CLASS(klass);
     device_class_set_legacy_reset(dc, dw_spi_reset);
     //TODO: ADD VMSTATE
@@ -368,8 +380,7 @@ static const TypeInfo dw_spi_info = {
     .class_init    = dw_spi_class_init,
 };
  
-static void dw_spi_register_types(void)
-{
+static void dw_spi_register_types(void) {
     type_register_static(&dw_spi_info);
 }
  

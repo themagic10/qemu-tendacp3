@@ -369,6 +369,9 @@ static const FlashPartInfo known_devices[] = {
 
     /* Microchip */
     { INFO("25csm04",      0x29cc00,      0x100,  64 << 10,  8, 0) },
+
+    //dw stuff
+    { INFO("by25q64as", 0x684017, 0, 64 << 10, 128, ER_4K) },
 };
 
 typedef enum {
