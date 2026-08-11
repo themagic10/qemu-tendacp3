@@ -197,7 +197,8 @@ static void fullhan_init_spi_master(MachineState *mc, qemu_irq spi_irq){
     //flash device, wiring m25p80 into virt
     DriveInfo *di = drive_get(IF_MTD, 0, 0);
     // using "m25p80" will result in a 8mbit flash, thanks qemu!
-    DeviceState *flash = qdev_new("by25q64as");
+    DeviceState *flash = qdev_new("by25q64as"); //correct one
+    //DeviceState *flash = qdev_new("w25q64"); //testing...
     if (di){
         qdev_prop_set_drive_err(flash, "drive", blk_by_legacy_dinfo(di), &error_fatal);
     }

@@ -18,6 +18,8 @@
 #include "system/memory.h"
 #include "hw/core/qdev.h"
 #include "qemu/log.h"
+#include "hw/core/irq.h"
+
 
 #define TYPE_DW_SPI "dw-spi"
 OBJECT_DECLARE_SIMPLE_TYPE(DWSPIState, DW_SPI)
@@ -137,6 +139,12 @@ struct DWSPIState {
 };
 
 static void evaluatecs(DWSPIState* s){
+
+    //deassert all
+    for (int i = 0; i<MAX_SLAVE;i ++){
+        qemu_set_irq(s->cs[i], 1);
+    }
+
     if (!s->ser){
         s->hasselectedchip = false;
         return;
@@ -145,10 +153,12 @@ static void evaluatecs(DWSPIState* s){
     uint index = ctz32(s->ser);
     s->selected_cs = index;
     s->hasselectedchip = true;
+    qemu_set_irq(s->cs[index], 0); //assert
 }
 
 static uint32_t transfer(DWSPIState *s, uint32_t data){
     uint32_t rx = ssi_transfer(s->bus, data);
+    //error_report("ssi transfer: tx=%x rx=%x cs=%u", data, rx, s->selected_cs );
     return rx;
 }
 
@@ -166,7 +176,7 @@ static void dw_spi_flush(DWSPIState *s){
 }
 
 /*  DATA REGISTERS  */
-static uint32_t dw_spi_read(DWSPIState *s){
+static uint32_t dw_spi_read(DWSPIState *s, uint size){
 
     uint32_t ret;
     
@@ -175,13 +185,16 @@ static uint32_t dw_spi_read(DWSPIState *s){
         s->fifo_head++;
         s->fifo_len--;
     }
-    else if (s->rx_left){
-        if (!s->hasselectedchip){
-            error_report("dw spi: tried to read in rx/eprom without cs");
-            return 0xffffffff;
-        }
+    else if (s->hasselectedchip){
+    //else if (s->rx_left){
+        //if (!s->hasselectedchip){
+        //    error_report("dw spi: tried to read in rx/eprom without cs");
+        //    return 0xffffffff;
+        //}
         ret = transfer(s, 0xffff);
-        s->rx_left--;
+        if (s->rx_left){
+            s->rx_left--;
+        }
     }
     else {
         //error_report("ssi no fifo or rx data... cs=%d rx_left=%u fifo_len=%u", s->hasselectedchip, s->rx_left, s->fifo_len);
@@ -230,7 +243,7 @@ static uint64_t dw_spi_reg_read(void *opaque, hwaddr addr, unsigned size){
     }
 
     if ((addr >= DW_SPI_DR_BASE && addr <= DW_SPI_DR_END) || (addr >= 0x1000 && addr<0x2000)){
-        return dw_spi_read(s);
+        return dw_spi_read(s, size);
     }
 
     if (addr >= VENDOR_BASE && addr <= VENDOR_END){
