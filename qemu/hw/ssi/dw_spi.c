@@ -12,6 +12,7 @@
 #include <stdbool.h>
 #include <stdint.h>
 #include <stdio.h>
+#include <sys/types.h>
 #include "hw/core/hw-error.h"
 #include "qemu/error-report.h"
 #include "hw/core/sysbus.h"
@@ -70,6 +71,9 @@ OBJECT_DECLARE_SIMPLE_TYPE(DWSPIState, DW_SPI)
 // data frame size
 // max 16 bit frame size, same as fifo regs
 #define CTRL0_DFS(ctrl) ((ctrl) & 0xf)
+
+#define DFS_8BIT 0x7
+#define DFS_16BIT 0xf
 
 /*
 transmission mode:
@@ -136,6 +140,9 @@ struct DWSPIState {
     uint16_t fifo[MAX_FIFO];
     uint32_t fifo_head;
     uint32_t fifo_len;
+
+    uint16_t dummy;
+    bool dummypresent;
 };
 
 static void evaluatecs(DWSPIState* s){
@@ -146,6 +153,10 @@ static void evaluatecs(DWSPIState* s){
     }
 
     if (!s->ser){
+        if (s->dummypresent){
+            qemu_log_mask(LOG_GUEST_ERROR, "disabled cs with dummy data present, we just lost dummy=%x\n", s->dummy);
+        }
+        s->dummypresent = false;
         s->hasselectedchip = false;
         return;
     }
@@ -156,10 +167,22 @@ static void evaluatecs(DWSPIState* s){
     qemu_set_irq(s->cs[index], 0); //assert
 }
 
-static uint32_t transfer(DWSPIState *s, uint32_t data){
-    uint32_t rx = ssi_transfer(s->bus, data);
+//deprecated, use transfer()
+static uint32_t dfs_aware_transfer(DWSPIState *s, uint32_t data){
+    uint bits = CTRL0_DFS(s->ctrlr0);
+    uint32_t ret = 0;
+    uint8_t byte = ssi_transfer(s->bus, data & 0xff) & 0xff;
+    ret |= (uint32_t)byte;
+    if (bits>DFS_8BIT){
+        uint8_t hibyte = ssi_transfer(s->bus, (data >> 8)&0xff) & 0xff;
+        ret |= (uint32_t)(hibyte<<8);
+    }
     //error_report("ssi transfer: tx=%x rx=%x cs=%u", data, rx, s->selected_cs );
-    return rx;
+    return ret;
+}
+
+static uint32_t transfer(DWSPIState *s, uint32_t data){
+    return ssi_transfer(s->bus, data &0xff) & 0xff;
 }
 
 static void fifo_push_data(DWSPIState *s, uint32_t data){
@@ -178,27 +201,34 @@ static void dw_spi_flush(DWSPIState *s){
 /*  DATA REGISTERS  */
 static uint32_t dw_spi_read(DWSPIState *s, uint size){
 
-    uint32_t ret;
-    
-    if (s->fifo_len){
-        ret = s->fifo[s->fifo_head];
-        s->fifo_head++;
-        s->fifo_len--;
-    }
-    else if (s->hasselectedchip){
-    //else if (s->rx_left){
-        //if (!s->hasselectedchip){
-        //    error_report("dw spi: tried to read in rx/eprom without cs");
-        //    return 0xffffffff;
-        //}
-        ret = transfer(s, 0xffff);
-        if (s->rx_left){
-            s->rx_left--;
+    uint32_t ret = 0;
+    for (uint i = 0; i<size; i++){
+        uint8_t byte;
+        if (s->dummypresent){
+            byte = s->dummy;
+            s->dummypresent = false;
         }
-    }
-    else {
-        //error_report("ssi no fifo or rx data... cs=%d rx_left=%u fifo_len=%u", s->hasselectedchip, s->rx_left, s->fifo_len);
-        ret = 0xffffffff;
+        else if (s->fifo_len){
+            byte = s->fifo[s->fifo_head] & 0xff;
+            s->fifo_head++;
+            s->fifo_len--;
+        }
+        else if (s->hasselectedchip){
+        //else if (s->rx_left){
+            //if (!s->hasselectedchip){
+            //    error_report("dw spi: tried to read in rx/eprom without cs");
+            //    return 0xffffffff;
+            //}
+            byte = transfer(s, 0xff) & 0xff;
+            if (s->rx_left){
+                s->rx_left--;
+            }
+        }
+        else {
+            //error_report("ssi no fifo or rx data... cs=%d rx_left=%u fifo_len=%u", s->hasselectedchip, s->rx_left, s->fifo_len);
+            byte = 0xff;
+        }
+        ret |= (uint32_t)byte <<(8*i);
     }
 
     return ret;
@@ -223,9 +253,14 @@ static void dw_spi_write(DWSPIState *s, uint32_t val){
                 s->rx_left = ndf;
             }
             break;
-        case TMOD_TX:
-            transfer(s, val);
+        case TMOD_TX:{
+            
+            uint8_t rx = transfer(s, val) & 0xff; //8 or 16?
+            qemu_log_mask(LOG_GUEST_ERROR, "dw spi: currently in transfer mode, rx=%x", rx);
+            s->dummy = rx;
+            s->dummypresent = true;
             break;
+        }
         case TMOD_EEPROM:
             hw_error("writing in eeprom mode, not implemented");
             break;
@@ -376,6 +411,7 @@ static void dw_spi_reset(DeviceState *dev){
     s->ctrlr1 = 0;
     s->ssienr = 0;
     s->ser = 0;
+    s->dummypresent = false;
 }
 
 static void dw_spi_class_init(ObjectClass *klass, const void *data){

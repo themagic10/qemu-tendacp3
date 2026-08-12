@@ -180,7 +180,7 @@ static void dmac_transfer(DWDmacState *s, uint channel_num, uint32_t ctl_lo, uin
     uint fifo_len = 0;
 
     uint64_t done = 0;
-    qemu_log_mask(LOG_GUEST_ERROR,"ch=%u ctl_lo=%x srcw=%u dstw=%u totalblock=%u", channel_num, ctl_lo, src_w, dst_w, block_ts);
+    //qemu_log_mask(LOG_GUEST_ERROR,"ch=%u ctl_lo=%x srcw=%u dstw=%u totalblock=%u", channel_num, ctl_lo, src_w, dst_w, block_ts);
 
     while (done < total) {
         if (dma_memory_read(&s->dma_as, saddr, fifo+fifo_len, src_w, MEMTXATTRS_UNSPECIFIED) != MEMTX_OK){
