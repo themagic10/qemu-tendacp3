@@ -693,3 +693,15 @@ config ARMSSE
     select UNIMP
     select SSE_COUNTER
     select SSE_TIMER
+
+config FULLHAN
+    bool
+    default y
+    depends on ARM
+    depends on TCG
+    select PL011
+    select SSI
+    select UNIMP
+    select DW_SPI
+    select DW_DMAC
+    select DW_TIMER

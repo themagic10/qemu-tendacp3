@@ -32,6 +32,8 @@
 #include "qemu/log.h"
 #include "qemu/module.h"
 #include "trace.h"
+#include "qemu/error-report.h"
+
 
 DeviceState *pl011_create(hwaddr addr, qemu_irq irq, Chardev *chr)
 {
@@ -289,6 +291,11 @@ static uint64_t pl011_read(void *opaque, hwaddr offset,
 {
     PL011State *s = (PL011State *)opaque;
     uint64_t r;
+    if (offset == 124){
+        //tenda uart tx fix
+        qemu_log_mask(LOG_GUEST_ERROR,"reading correct uart tx fifo value\n");
+        return 0x06; //0b110
+    }
 
     switch (offset >> 2) {
     case 0: /* UARTDR */
@@ -337,6 +344,10 @@ static uint64_t pl011_read(void *opaque, hwaddr offset,
         */
     case 31: //REALLY REALLY UGLY PATCH FOR TENDA. I HATE THIS SO MUCH
         return 0x02;
+        break;
+    case 124: //tenda uart tx fix
+        error_report("reading correct uart tx fifo value");
+        return 0x06; //0b110
         break;
     case 0x3f8 ... 0x400:
         r = s->id[(offset - 0xfe0) >> 2];

@@ -28,11 +28,10 @@ RUN make -j$(nproc)
 
 WORKDIR $QEMU_ROOT
 
-CMD $QEMU_SRC/build/qemu-system-arm -s -S -M virt \
-	-cpu cortex-a15 \
+CMD $QEMU_SRC/build/qemu-system-arm -s -S -M fullhan8626v100 \
+	-cpu arm1176 \
 	-m 48M \
 	-d unimp,int,mmu,guest_errors -D errvirdump.log \
-	-device loader,file=$QEMU_IMAGES/uboot.dd,addr=0xa0800000 \
-	-device loader,addr=0xa0800000,cpu-num=0 \
+	-kernel $QEMU_IMAGES/uboot.dd \
 	-drive file=$QEMU_IMAGES/firmware.bin,format=raw,if=mtd \
 	-serial stdio -monitor telnet:0.0.0.0:8888,server,nowait
