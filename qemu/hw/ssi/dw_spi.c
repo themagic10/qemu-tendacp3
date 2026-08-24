@@ -256,7 +256,7 @@ static void dw_spi_write(DWSPIState *s, uint32_t val){
         case TMOD_TX:{
             
             uint8_t rx = transfer(s, val) & 0xff; //8 or 16?
-            qemu_log_mask(LOG_GUEST_ERROR, "dw spi: currently in transfer mode, rx=%x", rx);
+            qemu_log_mask(LOG_GUEST_ERROR, "dw spi: currently in transfer mode, rx=%x\n", rx);
             s->dummy = rx;
             s->dummypresent = true;
             break;
@@ -328,7 +328,8 @@ static void dw_spi_reg_write(void *opaque, hwaddr addr, uint64_t value, unsigned
     switch (addr) {
         case DW_SPI_CTRLR0:
             if (!s->ssienr){
-                qemu_log_mask(LOG_GUEST_ERROR,"dw spi: writing to ctrl0 without setting ssienr");
+                //fun fact: this is quite common it seems...
+                qemu_log_mask(LOG_GUEST_ERROR,"dw spi: writing to ctrl0 without setting ssienr\n");
             }
             s->ctrlr0 = value & 0xffffffff;
             break;

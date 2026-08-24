@@ -705,3 +705,4 @@ config FULLHAN
     select DW_SPI
     select DW_DMAC
     select DW_TIMER
+    select DW_UART

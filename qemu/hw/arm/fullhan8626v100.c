@@ -3,6 +3,7 @@
 #include "qemu/error-report.h"
 #include "qemu/typedefs.h"
 #include "qom/object.h"
+#include "qemu/module.h"
  
 #include "hw/core/boards.h"
 #include "hw/core/cpu.h"
@@ -12,17 +13,17 @@
 #include "hw/ssi/ssi.h"
 #include "hw/misc/unimp.h"
 #include "hw/core/loader.h"
- 
+#include "hw/char/serial-mm.h" 
+#include "hw/core/qdev.h"
+#include "hw/arm/machines-qom.h"
+
+
 #include "system/address-spaces.h"
 #include "system/blockdev.h"
 #include "system/memory.h"
 #include "system/reset.h"
 #include "system/system.h"
-#include "hw/core/qdev.h"
-#include "hw/arm/machines-qom.h"
 
-
-#include "qemu/module.h"
  
 #include "target/arm/cpu-qom.h"
 #include <stdlib.h>
@@ -69,11 +70,20 @@ static void fh_init(MachineState *machine){
         error_report("fullhan8626v100: Ram size should be fixed at 48MB!\n");
         exit(1);
     }
+
+    // todo: reminder for future me
+    // despite the fact that the soc has 48mb of ram the kernel will only ask for 43
+    // the rest might be dedicated to video encoding or other stuff, dma access to those region
+    // *might* cause some issue if that's the case
     memory_region_add_subregion(sysmem, FH_DRAM_BASE, machine->ram);
 
     fhs->cpu = ARM_CPU(cpu_create(machine->cpu_type));
 
-    pl011_create(FH_UART_BASE, NULL, serial_hd(0));
+    //pl011_create(FH_UART_BASE, NULL, serial_hd(0));
+    DeviceState *uart = qdev_new("dw-uart");
+    qdev_prop_set_chr(uart, "chardev", serial_hd(0));
+    sysbus_realize_and_unref(SYS_BUS_DEVICE(uart), &error_fatal);
+    sysbus_mmio_map(SYS_BUS_DEVICE(uart), 0, FH_UART_BASE);
 
     ssi_dev = sysbus_create_simple("dw-spi", FH_SPI_BASE, NULL);
     ssi_bus = (SSIBus *)qdev_get_child_bus(ssi_dev, "ssi");
@@ -88,10 +98,14 @@ static void fh_init(MachineState *machine){
         qdev_connect_gpio_out_named(ssi_dev, SSI_GPIO_CS, 0, flash_cs);
     }
 
-    create_unimplemented_device("fh-crm", 0xf0000000, 0x2000);
+    //called that way in the kernel symbols... actually it's just pmu
+    create_unimplemented_device("fh-pmu-timer", 0xf0000000, 0x2000);
     create_unimplemented_device("wdt stub", 0xf0d00000, 0x2000);
     create_unimplemented_device("gpio0 stub", 0xf0300000, 0x2000);
     create_unimplemented_device("gpio1 stub", 0xf4000000, 0x2000);
+
+    //interrupt controller
+    create_unimplemented_device("fh intc stub", 0xe0200000, 0x2000);
 
     sysbus_create_simple("dw-timer", FH_TIMER_BASE, NULL);
     sysbus_create_simple("dw-dmac", FH_DMAC_BASE, NULL);
