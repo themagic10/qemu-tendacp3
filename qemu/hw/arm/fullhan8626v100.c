@@ -37,12 +37,16 @@ OBJECT_DECLARE_SIMPLE_TYPE(FHState, FH8626V100_MACHINE)
 
 #define FH_DRAM_BASE 0xa0000000
 #define FH_DRAM_SIZE 0x03000000
+#define FH_DMAC_BASE 0xe0300000
+#define FH_GMAC_BASE 0xe0600000
 
-#define FH_UART_BASE 0xf0700000
+#define FH_UART_0_BASE 0xf0700000
+#define FH_UART_1_BASE 0xf0800000
+#define FH_UART_2_BASE 0xf1300000
 
 #define FH_SPI_BASE 0xf0e00000
 
-#define FH_DMAC_BASE 0xe0300000
+
 
 #define FH_TIMER_BASE 0xf0c00000
 
@@ -88,7 +92,7 @@ static void fh_init(MachineState *machine){
     DeviceState *uart = qdev_new("dw-uart");
     qdev_prop_set_chr(uart, "chardev", serial_hd(0));
     sysbus_realize_and_unref(SYS_BUS_DEVICE(uart), &error_fatal);
-    sysbus_mmio_map(SYS_BUS_DEVICE(uart), 0, FH_UART_BASE);
+    sysbus_mmio_map(SYS_BUS_DEVICE(uart), 0, FH_UART_0_BASE);
     //sysbus_connect_irq(SYS_BUS_DEVICE(uart), 2, fhs->irq);
 
     ssi_dev = sysbus_create_simple("dw-spi", FH_SPI_BASE, NULL);
@@ -138,6 +142,9 @@ static void fh_init(MachineState *machine){
         load_image_targphys(machine->kernel_filename, FH_ENTRY, 
             FH_DRAM_SIZE, &error_fatal);
     }
+
+    DeviceState *uart1 = sysbus_create_simple("dw-uart", FH_UART_1_BASE, NULL);
+    DeviceState *uart2 = sysbus_create_simple("dw-uart", FH_UART_2_BASE, NULL);
 
     qemu_register_reset(fh_reset, fhs);
 }

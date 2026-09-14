@@ -41,7 +41,7 @@ OBJECT_DECLARE_SIMPLE_TYPE(DWSPIState, DW_SPI)
 #define DW_SPI_RXFTLR		    0x1c
 #define DW_SPI_TXFLR		    0x20
 #define DW_SPI_RXFLR		    0x24
-#define DW_SPI_SR			    0x28
+#define DW_SPI_SR			    0x28 //modified, see reg read
 #define DW_SPI_IMR			    0x2c
 #define DW_SPI_ISR			    0x30
 #define DW_SPI_RISR			    0x34
@@ -297,8 +297,15 @@ static uint64_t dw_spi_reg_read(void *opaque, hwaddr addr, unsigned size){
         case DW_SPI_TXFLR: ret = 0; break; // we consume tx instantly
         case DW_SPI_RXFLR: ret = s->fifo_len + s->rx_left; break;
         case DW_SPI_DMACR: ret = s->dmacr; break;
+        
+        /*
+        in the kernel, at va 0xc0273eb0 inside fh_spic_check_idle the kernel
+        will check if bit 9 is set. if it's not it will crash
+        according to the docs this bit should be reserved... very well...
+        */
         case DW_SPI_SR:
             ret = SR_TFNF | SR_TFE; // fifo not full
+            ret |= (1<<9); //fh behaviour, see note
             break;
         case DW_SPI_IMR: ret = s->imr; break;
         default:

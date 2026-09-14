@@ -107,7 +107,7 @@ static uint64_t dw_timer_reg_read(void *opaque, hwaddr addr, unsigned size){
     switch(addr){
         case G_TIMERS_INT_STATUS:{
             uint32_t status = 0;
-            for (int i = 0; i < CHANNEL_AMT-1; i++){
+            for (int i = 0; i < CHANNEL_AMT; i++){
                 TimerChan *c = &s->chan[i];
                 if (c->int_status && !(c->control & MASKED_INT)){
                     status |= (1u<<i);
@@ -117,7 +117,7 @@ static uint64_t dw_timer_reg_read(void *opaque, hwaddr addr, unsigned size){
         }
 
         case G_TIMERS_EOI:{
-            for (int i = 0; i < CHANNEL_AMT-1; i++){
+            for (int i = 0; i < CHANNEL_AMT; i++){
                 TimerChan *c = &s->chan[i];
                 c->int_status = false;
                 timer_update_irq(c);
@@ -127,7 +127,7 @@ static uint64_t dw_timer_reg_read(void *opaque, hwaddr addr, unsigned size){
         }
         case G_TIMERS_RAW_INT_STATUS:{
             uint32_t status = 0;
-            for (int i = 0; i < CHANNEL_AMT-1; i++){
+            for (int i = 0; i < CHANNEL_AMT; i++){
                 TimerChan *c = &s->chan[i];
                 if (c->int_status){ // no mask check
                     status |= (1u<<i);
@@ -207,7 +207,7 @@ static const MemoryRegionOps dw_timer_ops = {
 
 static void dw_timer_reset(DeviceState *dev){
     DWTimerState *s = DW_TIMER(dev); 
-    for (int i = 0; i < CHANNEL_AMT-1; i++) {
+    for (int i = 0; i < CHANNEL_AMT; i++) {
         TimerChan *c = &s->chan[i];
  
         c->load = 0;
