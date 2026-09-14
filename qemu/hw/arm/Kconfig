@@ -706,3 +706,4 @@ config FULLHAN
     select DW_DMAC
     select DW_TIMER
     select DW_UART
+    select DW_INTC

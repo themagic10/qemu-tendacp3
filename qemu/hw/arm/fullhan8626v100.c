@@ -16,6 +16,7 @@
 #include "hw/char/serial-mm.h" 
 #include "hw/core/qdev.h"
 #include "hw/arm/machines-qom.h"
+#include "target/arm/cpu-qom.h"
 
 
 #include "system/address-spaces.h"
@@ -77,13 +78,18 @@ static void fh_init(MachineState *machine){
     // *might* cause some issue if that's the case
     memory_region_add_subregion(sysmem, FH_DRAM_BASE, machine->ram);
 
-    fhs->cpu = ARM_CPU(cpu_create(machine->cpu_type));
+    fhs->cpu = ARM_CPU(object_new(ARM_CPU_TYPE_NAME("arm1176")));
+    object_property_set_bool(OBJECT(fhs->cpu), "has_el3", false, &error_fatal);
+    object_property_set_bool(OBJECT(fhs->cpu), "realized", true, &error_fatal);
+
+    fhs->irq = qdev_get_gpio_in(DEVICE(fhs->cpu), ARM_CPU_IRQ);
 
     //pl011_create(FH_UART_BASE, NULL, serial_hd(0));
     DeviceState *uart = qdev_new("dw-uart");
     qdev_prop_set_chr(uart, "chardev", serial_hd(0));
     sysbus_realize_and_unref(SYS_BUS_DEVICE(uart), &error_fatal);
     sysbus_mmio_map(SYS_BUS_DEVICE(uart), 0, FH_UART_BASE);
+    //sysbus_connect_irq(SYS_BUS_DEVICE(uart), 2, fhs->irq);
 
     ssi_dev = sysbus_create_simple("dw-spi", FH_SPI_BASE, NULL);
     ssi_bus = (SSIBus *)qdev_get_child_bus(ssi_dev, "ssi");
@@ -99,15 +105,32 @@ static void fh_init(MachineState *machine){
     }
 
     //called that way in the kernel symbols... actually it's just pmu
-    create_unimplemented_device("fh-pmu-timer", 0xf0000000, 0x2000);
+    //create_unimplemented_device("fh-pmu-timer", 0xf0000000, 0x2000);
+    MemoryRegion *sram = g_new(MemoryRegion, 1);
+    memory_region_init_ram(sram, NULL, "pmu-test",
+                        0x2000, &error_fatal);
+    memory_region_add_subregion(get_system_memory(), 0xf0000000, sram);
+
+
     create_unimplemented_device("wdt stub", 0xf0d00000, 0x2000);
     create_unimplemented_device("gpio0 stub", 0xf0300000, 0x2000);
     create_unimplemented_device("gpio1 stub", 0xf4000000, 0x2000);
 
     //interrupt controller
-    create_unimplemented_device("fh intc stub", 0xe0200000, 0x2000);
+    DeviceState *intc = qdev_new("dw-intc");
+    sysbus_realize_and_unref(SYS_BUS_DEVICE(intc), &error_fatal);
+    sysbus_mmio_map(SYS_BUS_DEVICE(intc), 0, 0xe0200000);
+    sysbus_connect_irq(SYS_BUS_DEVICE(intc), 0, fhs->irq);
 
-    sysbus_create_simple("dw-timer", FH_TIMER_BASE, NULL);
+    //timer
+    DeviceState *timer = qdev_new("dw-timer");
+    sysbus_realize_and_unref(SYS_BUS_DEVICE(timer), &error_fatal);
+    sysbus_mmio_map(SYS_BUS_DEVICE(timer), 0, FH_TIMER_BASE);
+    sysbus_connect_irq(SYS_BUS_DEVICE(timer), 1, qdev_get_gpio_in(intc, 3));
+
+    //sysbus_create_simple("dw-timer", FH_TIMER_BASE, NULL);
+
+
     sysbus_create_simple("dw-dmac", FH_DMAC_BASE, NULL);
 
     if (machine->kernel_filename){

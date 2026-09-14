@@ -32,6 +32,7 @@ CMD $QEMU_SRC/build/qemu-system-arm -s -S -M fullhan8626v100 \
 	-cpu arm1176 \
 	-m 48M \
 	-d unimp,int,mmu,guest_errors -D errvirdump.log \
+	-icount shift=0 -rtc clock=vm \
 	-kernel $QEMU_IMAGES/uboot.dd \
 	-drive file=$QEMU_IMAGES/firmware.bin,format=raw,if=mtd \
 	-serial stdio -monitor telnet:0.0.0.0:8888,server,nowait
