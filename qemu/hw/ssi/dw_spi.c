@@ -214,18 +214,12 @@ static uint32_t dw_spi_read(DWSPIState *s, uint size){
             s->fifo_len--;
         }
         else if (s->hasselectedchip){
-        //else if (s->rx_left){
-            //if (!s->hasselectedchip){
-            //    error_report("dw spi: tried to read in rx/eprom without cs");
-            //    return 0xffffffff;
-            //}
             byte = transfer(s, 0xff) & 0xff;
             if (s->rx_left){
                 s->rx_left--;
             }
         }
         else {
-            //error_report("ssi no fifo or rx data... cs=%d rx_left=%u fifo_len=%u", s->hasselectedchip, s->rx_left, s->fifo_len);
             byte = 0xff;
         }
         ret |= (uint32_t)byte <<(8*i);

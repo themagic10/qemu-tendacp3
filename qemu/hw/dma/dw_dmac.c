@@ -227,9 +227,16 @@ out_loop:
 
 
 
-/* iomem r/w */
-
 static uint64_t evaluate_status_int(DWDmacState *s){
+    uint tfr = (s->raw_tfr != 0);
+    uint block = (s->raw_block != 0);
+    uint srctran = (s->raw_srctran != 0);
+    uint dsttran = (s->raw_dsttran != 0);
+    uint err = (s->raw_err != 0);
+    return (tfr | (block<<1) | (srctran<<2) | (dsttran<<3) | (err<<4));
+}
+
+static uint64_t evaluate_irq_int(DWDmacState *s){
     uint tfr = ((s->raw_tfr & s->mask_tfr) != 0);
     uint block = ((s->raw_block & s->mask_block) != 0);
     uint srctran = ((s->raw_srctran & s->mask_srctran) != 0);
@@ -239,7 +246,7 @@ static uint64_t evaluate_status_int(DWDmacState *s){
 }
 
 static void dmac_update_irq(DWDmacState *s){
-    qemu_set_irq(s->irq, evaluate_status_int(s) != 0);
+    qemu_set_irq(s->irq, evaluate_irq_int(s) != 0);
 }
 
 static void dw_dmac_start_channel(DWDmacState *s, uint ch_num){
@@ -347,8 +354,23 @@ static uint64_t dw_dmac_reg_read(void *opaque, hwaddr addr, unsigned size){
 
         case DMACFGREG: return s->dma_cfg;
         case CHENREG: return s->chan_en;
+
+        //constants from dump
+        //64 bits but they can and WILL be accessed 4 bytes at a time since the kernel is gonna
+        //read 0x3f4
+        case DMA_COMP_PARAMS_5:     return 0x00000000;
+        case DMA_COMP_PARAMS_5 + 4: return 0x2001dbc0;
+        case DMA_COMP_PARAMS_4:     return 0x2001dbc0;
+        case DMA_COMP_PARAMS_4 + 4: return 0x2001dbc0;
+        case DMA_COMP_PARAMS_3:     return 0x2001dbc0;
+        case DMA_COMP_PARAMS_3 + 4: return 0x2001dbc0;
+        case DMA_COMP_PARAMS_2:     return 0x2001dbc0;
+        case DMA_COMP_PARAMS_2 + 4: return 0x00000000;
+        case DMA_COMP_PARAMS_1:     return 0x33aaaaaa;
+        case DMA_COMP_PARAMS_1 + 4: return 0x38000504; //will be read
+
         default:
-            error_report("dw dmac: reading unimplemented register %x\n", addr);
+            error_report("dw dmac: reading unimplemented register %lx\n", addr);
             return 0;
     }
 }
@@ -375,7 +397,7 @@ static void dw_dmac_reg_write(void *opaque, hwaddr addr, uint64_t value, unsigne
             case CH_SGR: ch->sgr = v; break;
             case CH_DSR: ch->dsr = v; break;
             default:
-                error_report("dw dmac: writing to unknown channel register %x\n", addr);
+                error_report("dw dmac: writing to unknown channel register %lx\n", addr);
                 break;
         
         }
@@ -419,7 +441,7 @@ static void dw_dmac_reg_write(void *opaque, hwaddr addr, uint64_t value, unsigne
             break;
         }
         default:
-        error_report("dw dmac: writing to unimplemented register %x", addr);
+        error_report("dw dmac: writing to unimplemented register %lx", addr);
     
     }
 
