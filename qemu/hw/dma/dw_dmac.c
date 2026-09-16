@@ -25,6 +25,7 @@
 #include "exec/memattrs.h"
 #include "qemu/bswap.h"
 #include "qemu/log.h"
+#include "hw/core/irq.h"
 
 #define TYPE_DW_DMAC "dw-dmac"
 OBJECT_DECLARE_SIMPLE_TYPE(DWDmacState, DW_DMAC);
@@ -224,6 +225,23 @@ out_loop:
     *dar = daddr;                                     
 }
 
+
+
+/* iomem r/w */
+
+static uint64_t evaluate_status_int(DWDmacState *s){
+    uint tfr = ((s->raw_tfr & s->mask_tfr) != 0);
+    uint block = ((s->raw_block & s->mask_block) != 0);
+    uint srctran = ((s->raw_srctran & s->mask_srctran) != 0);
+    uint dsttran = ((s->raw_dsttran & s->mask_dsttran) != 0);
+    uint err = ((s->raw_err & s->mask_err) != 0);
+    return (tfr | (block<<1) | (srctran<<2) | (dsttran<<3) | (err<<4));
+}
+
+static void dmac_update_irq(DWDmacState *s){
+    qemu_set_irq(s->irq, evaluate_status_int(s) != 0);
+}
+
 static void dw_dmac_start_channel(DWDmacState *s, uint ch_num){
     DwDmacChanState ch = s->chan[ch_num];
     uint32_t sar = ch.sar;
@@ -277,20 +295,8 @@ static void dw_dmac_start_channel(DWDmacState *s, uint ch_num){
 
     //disable channel
     s->chan_en &= ~(1u<<ch_num);
+    dmac_update_irq(s);
 }
-
-/* iomem r/w */
-
-static uint64_t evaluate_status_int(DWDmacState *s){
-    uint tfr = ((s->raw_tfr & s->mask_tfr) != 0);
-    uint block = ((s->raw_block & s->mask_block) != 0);
-    uint srctran = ((s->raw_srctran & s->mask_srctran) != 0);
-    uint dsttran = ((s->raw_dsttran & s->mask_dsttran) != 0);
-    uint err = ((s->raw_err & s->mask_err) != 0);
-    return (tfr | (block<<1) | (srctran<<2) | (dsttran<<3) | (err<<4));
-}
-
-
 
 static uint64_t dw_dmac_reg_read(void *opaque, hwaddr addr, unsigned size){
     DWDmacState *s = DW_DMAC(opaque);
@@ -382,23 +388,25 @@ static void dw_dmac_reg_write(void *opaque, hwaddr addr, uint64_t value, unsigne
 
     switch (addr) {
 
-        case MASKTFR: s->mask_tfr =  (s->mask_tfr & ~we) | (data & we); break;
-        case MASKBLOCK: s->mask_block =  (s->mask_block & ~we) | (data & we); break;
-        case MASKSRCTRAN: s->mask_srctran =  (s->mask_srctran & ~we) | (data & we); break;
-        case MASKDSTTRAN: s->mask_dsttran =  (s->mask_dsttran & ~we) | (data & we); break;
-        case MASKERR: s->mask_err =  (s->mask_err & ~we) | (data & we); break;
+        case MASKTFR: s->mask_tfr =  (s->mask_tfr & ~we) | (data & we); goto irqlab;
+        case MASKBLOCK: s->mask_block =  (s->mask_block & ~we) | (data & we); goto irqlab;
+        case MASKSRCTRAN: s->mask_srctran =  (s->mask_srctran & ~we) | (data & we); goto irqlab;
+        case MASKDSTTRAN: s->mask_dsttran =  (s->mask_dsttran & ~we) | (data & we); goto irqlab;
+        case MASKERR: s->mask_err =  (s->mask_err & ~we) | (data & we); goto irqlab;
 
         // clears raw (and therefore status) regs
-        case CLEARTFR: s->raw_tfr &= ~v; break;
-        case CLEARBLOCK: s->raw_block &= ~v; break;
-        case CLEARSRCTRAN: s->raw_srctran &= ~v; break;
-        case CLEARDSTTRAN: s->raw_dsttran &= ~v; break;
-        case CLEANERR: s->raw_err &= ~v; break;
+        case CLEARTFR: s->raw_tfr &= ~v; goto irqlab;
+        case CLEARBLOCK: s->raw_block &= ~v; goto irqlab;
+        case CLEARSRCTRAN: s->raw_srctran &= ~v; goto irqlab;
+        case CLEARDSTTRAN: s->raw_dsttran &= ~v; goto irqlab;
+        case CLEANERR: s->raw_err &= ~v; goto irqlab;
+        
+        irqlab: dmac_update_irq(s); break;
 
         //enable reg
         case DMACFGREG: s->dma_cfg = v & 0x1; break;
 
-        case CHENREG:
+        case CHENREG:{
             // if we try to enable an already existing channel we will fail here
             uint newchan = (data & we) & ~s->chan_en; 
 
@@ -409,7 +417,7 @@ static void dw_dmac_reg_write(void *opaque, hwaddr addr, uint64_t value, unsigne
                 }
             }
             break;
-
+        }
         default:
         error_report("dw dmac: writing to unimplemented register %x", addr);
     

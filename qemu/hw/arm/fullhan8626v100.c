@@ -45,6 +45,7 @@ OBJECT_DECLARE_SIMPLE_TYPE(FHState, FH8626V100_MACHINE)
 #define FH_UART_2_BASE 0xf1300000
 
 #define FH_SPI_BASE 0xf0e00000
+#define FH_SPI_1_BASE 0xf0500000
 
 
 
@@ -108,17 +109,30 @@ static void fh_init(MachineState *machine){
         qdev_connect_gpio_out_named(ssi_dev, SSI_GPIO_CS, 0, flash_cs);
     }
 
-    //called that way in the kernel symbols... actually it's just pmu
-    //create_unimplemented_device("fh-pmu-timer", 0xf0000000, 0x2000);
-    MemoryRegion *sram = g_new(MemoryRegion, 1);
-    memory_region_init_ram(sram, NULL, "pmu-test",
-                        0x2000, &error_fatal);
-    memory_region_add_subregion(get_system_memory(), 0xf0000000, sram);
+    DeviceState *spi1 = sysbus_create_simple("dw-spi", FH_SPI_1_BASE, NULL);
 
+    //effectively a stub!
+    //0x54 needs to be -1 or we get stuck in a loop
+    DeviceState *pmu = sysbus_create_simple("dw-pmu", 0xf0000000, NULL);
 
     create_unimplemented_device("wdt stub", 0xf0d00000, 0x2000);
+
     create_unimplemented_device("gpio0 stub", 0xf0300000, 0x2000);
     create_unimplemented_device("gpio1 stub", 0xf4000000, 0x2000);
+
+    create_unimplemented_device("otg stub", 0xe0700000, 0x2000);
+    create_unimplemented_device("rtc stub", 0xf1500000, 0x2000);
+
+    create_unimplemented_device("i2c_0 stub", 0xf0200000, 0x2000);
+    create_unimplemented_device("i2c_1 stub", 0xf0b00000, 0x2000);
+    create_unimplemented_device("i2c_2 stub", 0xf0100000, 0x2000);
+
+    //almost stubs too
+    DeviceState *mci0 = sysbus_create_simple("dw-mci", 0xe2000000, NULL);
+    DeviceState *mci1 = sysbus_create_simple("dw-mci", 0xe2200000, NULL);
+
+    create_unimplemented_device("gmac stub", FH_GMAC_BASE, 0x2000);
+    
 
     //interrupt controller
     DeviceState *intc = qdev_new("dw-intc");
@@ -135,7 +149,7 @@ static void fh_init(MachineState *machine){
     //sysbus_create_simple("dw-timer", FH_TIMER_BASE, NULL);
 
 
-    sysbus_create_simple("dw-dmac", FH_DMAC_BASE, NULL);
+    sysbus_create_simple("dw-dmac", FH_DMAC_BASE, qdev_get_gpio_in(intc, 21));
 
     if (machine->kernel_filename){
         //not the actual max size but still

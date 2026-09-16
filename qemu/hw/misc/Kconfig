@@ -262,4 +262,7 @@ config IOSB
 config XLNX_VERSAL_TRNG
     bool
 
+config DW_PMU
+    bool
+
 source macio/Kconfig

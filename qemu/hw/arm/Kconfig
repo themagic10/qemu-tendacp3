@@ -707,3 +707,5 @@ config FULLHAN
     select DW_TIMER
     select DW_UART
     select DW_INTC
+    select DW_PMU
+    select DW_MCI
