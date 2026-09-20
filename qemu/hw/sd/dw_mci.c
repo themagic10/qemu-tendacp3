@@ -35,6 +35,7 @@ static uint64_t dw_mci_reg_read(void *opaque, hwaddr addr, unsigned size){
 
     //0xc02c7234: return 0x1 to skip first cmp to jump to rescan, exits fun
     switch (addr) {
+        case 0x44:  return 0x104;
         case SDMMC_CDETECT: return 0x1;
         default: break;    
     }

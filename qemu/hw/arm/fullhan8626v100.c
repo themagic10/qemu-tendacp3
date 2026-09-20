@@ -17,7 +17,7 @@
 #include "hw/core/qdev.h"
 #include "hw/arm/machines-qom.h"
 #include "target/arm/cpu-qom.h"
-
+#include "exec/hwaddr.h"
 
 #include "system/address-spaces.h"
 #include "system/blockdev.h"
@@ -47,6 +47,8 @@ OBJECT_DECLARE_SIMPLE_TYPE(FHState, FH8626V100_MACHINE)
 #define FH_SPI_BASE 0xf0e00000
 #define FH_SPI_1_BASE 0xf0500000
 
+#define FH_INTC_BASE 0xe0200000
+
 
 
 #define FH_TIMER_BASE 0xf0c00000
@@ -55,6 +57,8 @@ struct FHState{
     MachineState parent;
     ARMCPU* cpu;
     qemu_irq irq;
+
+    DeviceState* intc;
 };
 
 static void fh_reset(void* opaque){
@@ -62,6 +66,23 @@ static void fh_reset(void* opaque){
     CPUState *cps = CPU(fhs->cpu);
     cpu_reset(cps);
     cpu_set_pc(cps, FH_ENTRY);
+}
+
+static DeviceState* fh_create_intc(FHState* s, hwaddr addr){
+    DeviceState *intc = qdev_new("dw-intc");
+    sysbus_realize_and_unref(SYS_BUS_DEVICE(intc), &error_fatal);
+    sysbus_mmio_map(SYS_BUS_DEVICE(intc), 0, addr);
+    sysbus_connect_irq(SYS_BUS_DEVICE(intc), 0, s->irq);
+    return intc;
+}
+
+static DeviceState* fh_create_uart(FHState* s, hwaddr addr, int irq, Chardev* chardev){
+    DeviceState *uart = qdev_new("dw-uart");
+    qdev_prop_set_chr(uart, "chardev", chardev);
+    sysbus_realize_and_unref(SYS_BUS_DEVICE(uart), &error_fatal);
+    sysbus_mmio_map(SYS_BUS_DEVICE(uart), 0, FH_UART_0_BASE);
+    sysbus_connect_irq(SYS_BUS_DEVICE(uart), 0, qdev_get_gpio_in(s->intc, irq));
+    return uart;
 }
 
 static void fh_init(MachineState *machine){
@@ -89,12 +110,7 @@ static void fh_init(MachineState *machine){
 
     fhs->irq = qdev_get_gpio_in(DEVICE(fhs->cpu), ARM_CPU_IRQ);
 
-    //pl011_create(FH_UART_BASE, NULL, serial_hd(0));
-    DeviceState *uart = qdev_new("dw-uart");
-    qdev_prop_set_chr(uart, "chardev", serial_hd(0));
-    sysbus_realize_and_unref(SYS_BUS_DEVICE(uart), &error_fatal);
-    sysbus_mmio_map(SYS_BUS_DEVICE(uart), 0, FH_UART_0_BASE);
-    //sysbus_connect_irq(SYS_BUS_DEVICE(uart), 2, fhs->irq);
+    fhs->intc = fh_create_intc(fhs, FH_INTC_BASE);
 
     ssi_dev = sysbus_create_simple("dw-spi", FH_SPI_BASE, NULL);
     ssi_bus = (SSIBus *)qdev_get_child_bus(ssi_dev, "ssi");
@@ -132,24 +148,16 @@ static void fh_init(MachineState *machine){
     DeviceState *mci1 = sysbus_create_simple("dw-mci", 0xe2200000, NULL);
 
     create_unimplemented_device("gmac stub", FH_GMAC_BASE, 0x2000);
-    
 
-    //interrupt controller
-    DeviceState *intc = qdev_new("dw-intc");
-    sysbus_realize_and_unref(SYS_BUS_DEVICE(intc), &error_fatal);
-    sysbus_mmio_map(SYS_BUS_DEVICE(intc), 0, 0xe0200000);
-    sysbus_connect_irq(SYS_BUS_DEVICE(intc), 0, fhs->irq);
+    DeviceState *uart = fh_create_uart(fhs, FH_UART_0_BASE, 18, serial_hd(0));
 
     //timer
     DeviceState *timer = qdev_new("dw-timer");
     sysbus_realize_and_unref(SYS_BUS_DEVICE(timer), &error_fatal);
     sysbus_mmio_map(SYS_BUS_DEVICE(timer), 0, FH_TIMER_BASE);
-    sysbus_connect_irq(SYS_BUS_DEVICE(timer), 1, qdev_get_gpio_in(intc, 3));
+    sysbus_connect_irq(SYS_BUS_DEVICE(timer), 1, qdev_get_gpio_in(fhs->intc, 3));
 
-    //sysbus_create_simple("dw-timer", FH_TIMER_BASE, NULL);
-
-
-    sysbus_create_simple("dw-dmac", FH_DMAC_BASE, qdev_get_gpio_in(intc, 21));
+    sysbus_create_simple("dw-dmac", FH_DMAC_BASE, qdev_get_gpio_in(fhs->intc, 21));
 
     if (machine->kernel_filename){
         //not the actual max size but still
@@ -193,6 +201,7 @@ static const TypeInfo fh8626_mach_type = {
     .parent = TYPE_MACHINE,
     .class_init = fh_class_init,
     .interfaces = arm_machine_interfaces,
+    .instance_size = sizeof(FHState),
 };
 
 static void fullhan8626v100_register_types(void){

@@ -25,6 +25,8 @@ OBJECT_DECLARE_SIMPLE_TYPE(DWUartState, DW_UART)
 #define DW_RFW
 #define DW_USR 0x7c
 
+#define UART_LSR_DR   0x01 //line status register, data ready bit
+
 struct DWUartState {
     SysBusDevice parent_obj;
 
@@ -32,7 +34,6 @@ struct DWUartState {
     MemoryRegion dwmmio;
 
     SerialMM serial_mm;
-
 };
 
 static uint64_t dw_uart_reg_read(void *opaque, hwaddr addr, unsigned size){
@@ -44,7 +45,15 @@ static uint64_t dw_uart_reg_read(void *opaque, hwaddr addr, unsigned size){
     }
 
     switch (addr) {
-        case DW_USR: return 0x06;
+        case DW_USR:{
+            uint32_t usr = (1 << 1) | (1 << 2); // 0x6 base
+
+            //required when using ttys0 in userspace
+            if (ss->lsr & UART_LSR_DR) {
+                usr |= (1 << 3); // RFNE
+            }
+            return usr;
+        }
         default: 
             qemu_log_mask(LOG_GUEST_ERROR, "dw uart: reading unimplemented register %lx\n", addr);
             return 0;
@@ -102,6 +111,7 @@ static void dw_uart_realize(DeviceState* dev, Error **errp){
 
 static void dw_uart_instance_init(Object *obj){
     DWUartState *s = DW_UART(obj);
+    SysBusDevice *sbd = SYS_BUS_DEVICE(obj);
     object_initialize_child(obj, "serial-mm", &s->serial_mm, TYPE_SERIAL_MM);
     
     qdev_alias_all_properties(DEVICE(&s->serial_mm.serial), obj);
