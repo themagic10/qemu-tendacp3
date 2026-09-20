@@ -471,6 +471,7 @@ typedef enum {
     MAN_SST,
     MAN_ISSI,
     MAN_GENERIC,
+    MAN_BOYA
 } Manufacturer;
 
 typedef enum {
@@ -553,6 +554,8 @@ static inline Manufacturer get_man(Flash *s)
         return MAN_SST;
     case 0x9D:
         return MAN_ISSI;
+    case 0x68:
+        return MAN_BOYA;
     default:
         return MAN_GENERIC;
     }
@@ -1036,6 +1039,9 @@ static void decode_fast_read_cmd(Flash *s)
          * of dummy cycles, but this is unsupported at the time being.
          */
         s->needed_bytes += 1;
+        break;
+    case MAN_BOYA:
+        s->needed_bytes +=1;
         break;
     default:
         break;

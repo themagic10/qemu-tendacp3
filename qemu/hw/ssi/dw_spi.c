@@ -167,20 +167,6 @@ static void evaluatecs(DWSPIState* s){
     qemu_set_irq(s->cs[index], 0); //assert
 }
 
-//deprecated, use transfer()
-static uint32_t dfs_aware_transfer(DWSPIState *s, uint32_t data){
-    uint bits = CTRL0_DFS(s->ctrlr0);
-    uint32_t ret = 0;
-    uint8_t byte = ssi_transfer(s->bus, data & 0xff) & 0xff;
-    ret |= (uint32_t)byte;
-    if (bits>DFS_8BIT){
-        uint8_t hibyte = ssi_transfer(s->bus, (data >> 8)&0xff) & 0xff;
-        ret |= (uint32_t)(hibyte<<8);
-    }
-    //error_report("ssi transfer: tx=%x rx=%x cs=%u", data, rx, s->selected_cs );
-    return ret;
-}
-
 static uint32_t transfer(DWSPIState *s, uint32_t data){
     return ssi_transfer(s->bus, data &0xff) & 0xff;
 }
@@ -196,39 +182,44 @@ static void dw_spi_flush(DWSPIState *s){
     s->fifo_head = 0;
     s->fifo_len = 0;
     s->rx_left = 0;
+    s->dummypresent = false;
 }
 
-/*  DATA REGISTERS  */
-static uint32_t dw_spi_read(DWSPIState *s, uint size){
 
-    uint32_t ret = 0;
-    for (uint i = 0; i<size; i++){
-        uint8_t byte;
-        if (s->dummypresent){
-            byte = s->dummy;
-            s->dummypresent = false;
-        }
-        else if (s->fifo_len){
-            byte = s->fifo[s->fifo_head] & 0xff;
-            s->fifo_head++;
-            s->fifo_len--;
-        }
-        else if (s->hasselectedchip){
-            byte = transfer(s, 0xff) & 0xff;
-            if (s->rx_left){
-                s->rx_left--;
-            }
-        }
-        else {
-            byte = 0xff;
-        }
-        ret |= (uint32_t)byte <<(8*i);
+static uint8_t dw_spi_pop_byte(DWSPIState *s){
+    if (s->dummypresent){
+        s->dummypresent = false;
+        return s->dummy;
     }
-
-    return ret;
-    
-
+    if (s->fifo_len){
+        uint8_t byte = s->fifo[s->fifo_head] & 0xff;
+        s->fifo_head = (s->fifo_head + 1) % MAX_FIFO;
+        s->fifo_len--;
+        if (s->fifo_len == 0){
+            s->fifo_head = 0;
+        }
+        return byte;
+    }
+    if (s->hasselectedchip){
+        uint8_t byte = transfer(s, 0xff) & 0xff;
+        if (s->rx_left){
+            s->rx_left--;
+        }
+        return byte;
+    }
+    return 0xff;
 }
+
+static uint32_t dw_spi_read(DWSPIState *s, uint size){
+    uint32_t ret = dw_spi_pop_byte(s);
+
+    if (CTRL0_DFS(s->ctrlr0) > DFS_8BIT){
+        ret |= (uint32_t)dw_spi_pop_byte(s) << 8;
+    }
+    return ret;
+}
+
+
 static void dw_spi_write(DWSPIState *s, uint32_t val){
     uint32_t ndf = s->ctrlr1 + 1;
     if (!s->ssienr){
@@ -248,11 +239,7 @@ static void dw_spi_write(DWSPIState *s, uint32_t val){
             }
             break;
         case TMOD_TX:{
-            
-            uint8_t rx = transfer(s, val) & 0xff; //8 or 16?
-            qemu_log_mask(LOG_GUEST_ERROR, "dw spi: currently in transfer mode, rx=%x\n", rx);
-            s->dummy = rx;
-            s->dummypresent = true;
+            transfer(s, val);
             break;
         }
         case TMOD_EEPROM:

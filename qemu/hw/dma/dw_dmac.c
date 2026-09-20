@@ -250,19 +250,19 @@ static void dmac_update_irq(DWDmacState *s){
 }
 
 static void dw_dmac_start_channel(DWDmacState *s, uint ch_num){
-    DwDmacChanState ch = s->chan[ch_num];
-    uint32_t sar = ch.sar;
-    uint32_t dar = ch.dar;
-    uint32_t ctl_lo = ch.ctl_lo;
-    uint32_t ctl_hi = ch.ctl_hi;
-    uint32_t next = ch.llp;
+    DwDmacChanState *ch = &s->chan[ch_num];
+    uint32_t sar = ch->sar;
+    uint32_t dar = ch->dar;
+    uint32_t ctl_lo = ch->ctl_lo;
+    uint32_t ctl_hi = ch->ctl_hi;
+    uint32_t next = ch->llp;
 
     // check if dmac is enabled
     if (!(s->dma_cfg & 0x1)){
         error_report("dw dmac: creating channel without enabling dmac!");
     }
 
-    if (CTL_LLP_SRC_EN(ch.ctl_lo)| CTL_LLP_DEST_EN(ch.ctl_lo)){
+    if (CTL_LLP_SRC_EN(ch->ctl_lo)| CTL_LLP_DEST_EN(ch->ctl_lo)){
 
         while (next != 0){
             uint32_t ll_buff[5];
@@ -290,11 +290,11 @@ static void dw_dmac_start_channel(DWDmacState *s, uint ch_num){
         s->raw_block |= 1u << ch_num;
     }
 
-    ch.sar = sar;
-    ch.dar = dar;
-    ch.llp = next;
-    ch.ctl_lo = ctl_lo;
-    ch.ctl_hi = ctl_hi;
+    ch->sar = sar;
+    ch->dar = dar;
+    ch->llp = next;
+    ch->ctl_lo = ctl_lo;
+    ch->ctl_hi = ctl_hi;
 
     s->raw_srctran |= 1u<<ch_num;
     s->raw_dsttran |= 1u<<ch_num;

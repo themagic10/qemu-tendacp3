@@ -36,7 +36,7 @@ OBJECT_DECLARE_SIMPLE_TYPE(FHState, FH8626V100_MACHINE)
 #define FH_ENTRY 0xa0800000
 
 #define FH_DRAM_BASE 0xa0000000
-#define FH_DRAM_SIZE 0x03000000
+#define FH_DRAM_SIZE 0x04000000
 #define FH_DMAC_BASE 0xe0300000
 #define FH_GMAC_BASE 0xe0600000
 
@@ -94,12 +94,12 @@ static void fh_init(MachineState *machine){
 
 
     if (machine->ram_size != FH_DRAM_SIZE){
-        error_report("fullhan8626v100: Ram size should be fixed at 48MB!\n");
+        error_report("fullhan8626v100: Ram size should be fixed at 64MB!\n");
         exit(1);
     }
 
     // todo: reminder for future me
-    // despite the fact that the soc has 48mb of ram the kernel will only ask for 43
+    // despite the fact that the soc has 64mb of ram the kernel will only ask for 43
     // the rest might be dedicated to video encoding or other stuff, dma access to those region
     // *might* cause some issue if that's the case
     memory_region_add_subregion(sysmem, FH_DRAM_BASE, machine->ram);
@@ -167,6 +167,14 @@ static void fh_init(MachineState *machine){
 
     DeviceState *uart1 = sysbus_create_simple("dw-uart", FH_UART_1_BASE, NULL);
     DeviceState *uart2 = sysbus_create_simple("dw-uart", FH_UART_2_BASE, NULL);
+
+    create_unimplemented_device("rtc stub", 0xf1500000, 0x4000);
+    create_unimplemented_device("efuse stub", 0xf1600000, 0x4000);
+    create_unimplemented_device("audio stub", 0xf0900000, 0x4000);
+    create_unimplemented_device("sadc stub", 0xf1200000, 0x4000);
+    create_unimplemented_device("aes stub", 0xe8200000, 0x4000);
+    create_unimplemented_device("unknown region", 0xed000000, 0x4000);
+    
 
     qemu_register_reset(fh_reset, fhs);
 }

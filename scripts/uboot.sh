@@ -9,7 +9,7 @@ sleep 3
 
 ./qemu-system-arm -s -M fullhan8626v100 \
 	-cpu arm1176 \
-	-m 48M \
+	-m 64M \
 	-d unimp,int,mmu,guest_errors -D errvirdump.log \
 	-icount shift=0 -rtc clock=vm \
 	-kernel ../tendaimages/uboot.dd \
