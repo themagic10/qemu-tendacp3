@@ -350,7 +350,7 @@ static uint64_t dw_dmac_reg_read(void *opaque, hwaddr addr, unsigned size){
         case MASKDSTTRAN: return s->mask_dsttran;
         case MASKERR: return s->mask_err;
 
-        case STATUSINT: return evaluate_status_int(s);
+        case STATUSINT: return evaluate_irq_int(s);
 
         case DMACFGREG: return s->dma_cfg;
         case CHENREG: return s->chan_en;

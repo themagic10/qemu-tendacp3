@@ -174,7 +174,7 @@ static void fh_init(MachineState *machine){
     create_unimplemented_device("sadc stub", 0xf1200000, 0x4000);
     create_unimplemented_device("aes stub", 0xe8200000, 0x4000);
     create_unimplemented_device("unknown region", 0xed000000, 0x4000);
-    
+    create_unimplemented_device("pwm stub", 0xf0400000, 0x4000);
 
     qemu_register_reset(fh_reset, fhs);
 }
