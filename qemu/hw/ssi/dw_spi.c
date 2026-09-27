@@ -290,7 +290,7 @@ static uint64_t dw_spi_reg_read(void *opaque, hwaddr addr, unsigned size){
             break;
         case DW_SPI_IMR: ret = s->imr; break;
         default:
-            error_report("dw spi: reading unimplemented register %X", addr);
+            error_report("dw spi: reading unimplemented register %lX", addr);
             break;
     }
     return ret;
