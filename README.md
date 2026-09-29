@@ -1,4 +1,5 @@
 # TENDA CP3 EMULATION IN QEMU
 Thesis project
 
-modified virt.c, virt.h pl011.c
+# How to run
+./scripts/

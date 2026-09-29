@@ -37,21 +37,44 @@ OBJECT_DECLARE_SIMPLE_TYPE(FHState, FH8626V100_MACHINE)
 
 #define FH_DRAM_BASE 0xa0000000
 #define FH_DRAM_SIZE 0x04000000
+
+#define FH_PMU_BASE 0xf0000000
+
 #define FH_DMAC_BASE 0xe0300000
 #define FH_GMAC_BASE 0xe0600000
-
 #define FH_UART_0_BASE 0xf0700000
 #define FH_UART_1_BASE 0xf0800000
 #define FH_UART_2_BASE 0xf1300000
 
-#define FH_SPI_BASE 0xf0e00000
+#define FH_SPI_0_BASE 0xf0e00000
 #define FH_SPI_1_BASE 0xf0500000
 
 #define FH_INTC_BASE 0xe0200000
 
+#define FH_WDT_BASE 0xf0d00000
+#define FH_GPIO_0_BASE 0xf0300000
+#define FH_GPIO_1_BASE 0xf4000000
+#define FH_OTG_BASE 0xe0700000
+#define FH_RTC_BASE 0xf1500000
 
+#define FH_MCI_0_BASE 0xe2000000
+#define FH_MCI_1_BASE 0xe2200000
+
+
+#define FH_I2C_0_BASE 0xf0200000
+#define FH_I2C_1_BASE 0xf0b00000
+#define FH_I2C_2_BASE 0xf0100000
+
+#define FH_RTC_BASE 0xf1500000
+#define FH_EFUSE_BASE 0xf1600000
+#define FH_AUDIO_BASE 0xf0900000
+#define FH_SADC_BASE 0xf1200000
+#define FH_AES_BASE 0xe8200000
+#define FH_PWM_BASE 0xf0400000
 
 #define FH_TIMER_BASE 0xf0c00000
+
+#define REGION_SIZE 0x4000
 
 struct FHState{
     MachineState parent;
@@ -112,7 +135,7 @@ static void fh_init(MachineState *machine){
 
     fhs->intc = fh_create_intc(fhs, FH_INTC_BASE);
 
-    ssi_dev = sysbus_create_simple("dw-spi", FH_SPI_BASE, NULL);
+    ssi_dev = sysbus_create_simple("dw-spi", FH_SPI_0_BASE, NULL);
     ssi_bus = (SSIBus *)qdev_get_child_bus(ssi_dev, "ssi");
 
     dinfo = drive_get(IF_MTD, 0, 0);
@@ -129,25 +152,25 @@ static void fh_init(MachineState *machine){
 
     //effectively a stub!
     //0x54 needs to be -1 or we get stuck in a loop
-    DeviceState *pmu = sysbus_create_simple("dw-pmu", 0xf0000000, NULL);
+    DeviceState *pmu = sysbus_create_simple("dw-pmu", FH_PMU_BASE, NULL);
 
-    create_unimplemented_device("wdt stub", 0xf0d00000, 0x2000);
+    create_unimplemented_device("wdt stub", FH_WDT_BASE, REGION_SIZE);
 
-    create_unimplemented_device("gpio0 stub", 0xf0300000, 0x2000);
-    create_unimplemented_device("gpio1 stub", 0xf4000000, 0x2000);
+    create_unimplemented_device("gpio0 stub", FH_GPIO_0_BASE, REGION_SIZE);
+    create_unimplemented_device("gpio1 stub", FH_GPIO_1_BASE, REGION_SIZE);
 
-    create_unimplemented_device("otg stub", 0xe0700000, 0x2000);
-    create_unimplemented_device("rtc stub", 0xf1500000, 0x2000);
+    create_unimplemented_device("otg stub", FH_OTG_BASE, REGION_SIZE);
+    create_unimplemented_device("rtc stub", FH_RTC_BASE, REGION_SIZE);
 
-    create_unimplemented_device("i2c_0 stub", 0xf0200000, 0x2000);
-    create_unimplemented_device("i2c_1 stub", 0xf0b00000, 0x2000);
-    create_unimplemented_device("i2c_2 stub", 0xf0100000, 0x2000);
+    create_unimplemented_device("i2c_0 stub", FH_I2C_0_BASE, REGION_SIZE);
+    create_unimplemented_device("i2c_1 stub", FH_I2C_1_BASE, REGION_SIZE);
+    create_unimplemented_device("i2c_2 stub", FH_I2C_2_BASE, REGION_SIZE);
 
     //almost stubs too
-    DeviceState *mci0 = sysbus_create_simple("dw-mci", 0xe2000000, NULL);
-    DeviceState *mci1 = sysbus_create_simple("dw-mci", 0xe2200000, NULL);
+    DeviceState *mci0 = sysbus_create_simple("dw-mci", FH_MCI_0_BASE, NULL);
+    DeviceState *mci1 = sysbus_create_simple("dw-mci", FH_MCI_1_BASE, NULL);
 
-    create_unimplemented_device("gmac stub", FH_GMAC_BASE, 0x2000);
+    create_unimplemented_device("gmac stub", FH_GMAC_BASE, REGION_SIZE);
 
     DeviceState *uart = fh_create_uart(fhs, FH_UART_0_BASE, 18, serial_hd(0));
 
@@ -165,16 +188,16 @@ static void fh_init(MachineState *machine){
             FH_DRAM_SIZE, &error_fatal);
     }
 
-    DeviceState *uart1 = sysbus_create_simple("dw-uart", FH_UART_1_BASE, NULL);
-    DeviceState *uart2 = sysbus_create_simple("dw-uart", FH_UART_2_BASE, NULL);
+    DeviceState *uart1 = sysbus_create_simple("dw-uart", FH_UART_1_BASE, qdev_get_gpio_in(fhs->intc, 19));
+    DeviceState *uart2 = sysbus_create_simple("dw-uart", FH_UART_2_BASE, qdev_get_gpio_in(fhs->intc, 20));
 
-    create_unimplemented_device("rtc stub", 0xf1500000, 0x4000);
-    create_unimplemented_device("efuse stub", 0xf1600000, 0x4000);
-    create_unimplemented_device("audio stub", 0xf0900000, 0x4000);
-    create_unimplemented_device("sadc stub", 0xf1200000, 0x4000);
-    create_unimplemented_device("aes stub", 0xe8200000, 0x4000);
-    create_unimplemented_device("unknown region", 0xed000000, 0x4000);
-    create_unimplemented_device("pwm stub", 0xf0400000, 0x4000);
+    create_unimplemented_device("rtc stub", FH_RTC_BASE, REGION_SIZE);
+    create_unimplemented_device("efuse stub", FH_EFUSE_BASE, REGION_SIZE);
+    create_unimplemented_device("audio stub", FH_AUDIO_BASE, REGION_SIZE);
+    create_unimplemented_device("sadc stub", FH_SADC_BASE, REGION_SIZE);
+    create_unimplemented_device("aes stub", FH_AES_BASE, REGION_SIZE);
+    //create_unimplemented_device("unknown region", 0xed000000, 0x4000);
+    create_unimplemented_device("pwm stub", FH_PWM_BASE, REGION_SIZE);
 
     qemu_register_reset(fh_reset, fhs);
 }

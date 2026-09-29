@@ -67,10 +67,8 @@ static void timer_update_irq(TimerChan *c){
     bool active = c->int_status && !(c->control & MASKED_INT);
     qemu_set_irq(c->irq, active);
 }
-uint hitted = 0;
+
 static void timer_hit(void *opaque){
-    hitted++;
-    qemu_log_mask(LOG_GUEST_ERROR, "HIT: %u\n", hitted);
     TimerChan *c = opaque;
     c->int_status = true;
     timer_update_irq(c);
