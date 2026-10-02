@@ -18,6 +18,8 @@
 #include "hw/arm/machines-qom.h"
 #include "target/arm/cpu-qom.h"
 #include "exec/hwaddr.h"
+#include "hw/net/npcm_gmac.h"
+#include "net/net.h"
 
 #include "system/address-spaces.h"
 #include "system/blockdev.h"
@@ -27,6 +29,7 @@
 
  
 #include "target/arm/cpu-qom.h"
+#include <stdbool.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -170,7 +173,6 @@ static void fh_init(MachineState *machine){
     DeviceState *mci0 = sysbus_create_simple("dw-mci", FH_MCI_0_BASE, NULL);
     DeviceState *mci1 = sysbus_create_simple("dw-mci", FH_MCI_1_BASE, NULL);
 
-    create_unimplemented_device("gmac stub", FH_GMAC_BASE, REGION_SIZE);
 
     DeviceState *uart = fh_create_uart(fhs, FH_UART_0_BASE, 18, serial_hd(0));
 
@@ -190,6 +192,12 @@ static void fh_init(MachineState *machine){
 
     DeviceState *uart1 = sysbus_create_simple("dw-uart", FH_UART_1_BASE, qdev_get_gpio_in(fhs->intc, 19));
     DeviceState *uart2 = sysbus_create_simple("dw-uart", FH_UART_2_BASE, qdev_get_gpio_in(fhs->intc, 20));
+
+    DeviceState* gmac = qdev_new(TYPE_NPCM_GMAC);
+    qemu_configure_nic_device(gmac, true, NULL);
+    sysbus_realize_and_unref(SYS_BUS_DEVICE(gmac), &error_fatal);
+    sysbus_mmio_map(SYS_BUS_DEVICE(gmac), 0, FH_GMAC_BASE);
+    sysbus_connect_irq(SYS_BUS_DEVICE(gmac), 0, qdev_get_gpio_in(fhs->intc, 13));
 
     create_unimplemented_device("rtc stub", FH_RTC_BASE, REGION_SIZE);
     create_unimplemented_device("efuse stub", FH_EFUSE_BASE, REGION_SIZE);

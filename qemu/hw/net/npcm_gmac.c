@@ -119,8 +119,10 @@ static const uint16_t phy_reg_init[] = {
     [MII_BMSR]      = MII_BMSR_100TX_FD | MII_BMSR_100TX_HD | MII_BMSR_10T_FD |
                       MII_BMSR_10T_HD | MII_BMSR_EXTSTAT | MII_BMSR_AUTONEG |
                       MII_BMSR_LINK_ST | MII_BMSR_EXTCAP,
-    [MII_PHYID1]    = 0x0362,
-    [MII_PHYID2]    = 0x5e6a,
+    //MII_PHYID1]    = 0x0362,
+    //[MII_PHYID2]    = 0x5e6a,
+    [MII_PHYID1]    = 0x001c,
+    [MII_PHYID2]    = 0xc816,
     [MII_ANAR]      = MII_ANAR_TXFD | MII_ANAR_TX | MII_ANAR_10FD |
                       MII_ANAR_10 | MII_ANAR_CSMACD,
     [MII_ANLPAR]    = MII_ANLPAR_ACK | MII_ANLPAR_PAUSE |
