@@ -106,7 +106,7 @@ static DeviceState* fh_create_uart(FHState* s, hwaddr addr, int irq, Chardev* ch
     DeviceState *uart = qdev_new("dw-uart");
     qdev_prop_set_chr(uart, "chardev", chardev);
     sysbus_realize_and_unref(SYS_BUS_DEVICE(uart), &error_fatal);
-    sysbus_mmio_map(SYS_BUS_DEVICE(uart), 0, FH_UART_0_BASE);
+    sysbus_mmio_map(SYS_BUS_DEVICE(uart), 0, addr);
     sysbus_connect_irq(SYS_BUS_DEVICE(uart), 0, qdev_get_gpio_in(s->intc, irq));
     return uart;
 }
@@ -124,14 +124,10 @@ static void fh_init(MachineState *machine){
         exit(1);
     }
 
-    // todo: reminder for future me
-    // despite the fact that the soc has 64mb of ram the kernel will only ask for 43
-    // the rest might be dedicated to video encoding or other stuff, dma access to those region
-    // *might* cause some issue if that's the case
     memory_region_add_subregion(sysmem, FH_DRAM_BASE, machine->ram);
 
     fhs->cpu = ARM_CPU(object_new(ARM_CPU_TYPE_NAME("arm1176")));
-    object_property_set_bool(OBJECT(fhs->cpu), "has_el3", false, &error_fatal);
+    //object_property_set_bool(OBJECT(fhs->cpu), "has_el3", true, &error_fatal);
     object_property_set_bool(OBJECT(fhs->cpu), "realized", true, &error_fatal);
 
     fhs->irq = qdev_get_gpio_in(DEVICE(fhs->cpu), ARM_CPU_IRQ);
@@ -174,7 +170,9 @@ static void fh_init(MachineState *machine){
     DeviceState *mci1 = sysbus_create_simple("dw-mci", FH_MCI_1_BASE, NULL);
 
 
-    DeviceState *uart = fh_create_uart(fhs, FH_UART_0_BASE, 18, serial_hd(0));
+    DeviceState *uart0 = fh_create_uart(fhs, FH_UART_0_BASE, 18, serial_hd(0));
+    DeviceState *uart1 = fh_create_uart(fhs, FH_UART_1_BASE, 19, serial_hd(1));
+    DeviceState *uart2 = fh_create_uart(fhs, FH_UART_2_BASE, 20, serial_hd(2));
 
     //timer
     DeviceState *timer = qdev_new("dw-timer");
@@ -184,14 +182,13 @@ static void fh_init(MachineState *machine){
 
     sysbus_create_simple("dw-dmac", FH_DMAC_BASE, qdev_get_gpio_in(fhs->intc, 21));
 
-    if (machine->kernel_filename){
+    if (machine->firmware){
         //not the actual max size but still
-        load_image_targphys(machine->kernel_filename, FH_ENTRY, 
+        load_image_targphys(machine->firmware, FH_ENTRY, 
             FH_DRAM_SIZE, &error_fatal);
     }
 
-    DeviceState *uart1 = sysbus_create_simple("dw-uart", FH_UART_1_BASE, qdev_get_gpio_in(fhs->intc, 19));
-    DeviceState *uart2 = sysbus_create_simple("dw-uart", FH_UART_2_BASE, qdev_get_gpio_in(fhs->intc, 20));
+    
 
     DeviceState* gmac = qdev_new(TYPE_NPCM_GMAC);
     qemu_configure_nic_device(gmac, true, NULL);
@@ -199,12 +196,10 @@ static void fh_init(MachineState *machine){
     sysbus_mmio_map(SYS_BUS_DEVICE(gmac), 0, FH_GMAC_BASE);
     sysbus_connect_irq(SYS_BUS_DEVICE(gmac), 0, qdev_get_gpio_in(fhs->intc, 13));
 
-    create_unimplemented_device("rtc stub", FH_RTC_BASE, REGION_SIZE);
     create_unimplemented_device("efuse stub", FH_EFUSE_BASE, REGION_SIZE);
     create_unimplemented_device("audio stub", FH_AUDIO_BASE, REGION_SIZE);
     create_unimplemented_device("sadc stub", FH_SADC_BASE, REGION_SIZE);
     create_unimplemented_device("aes stub", FH_AES_BASE, REGION_SIZE);
-    //create_unimplemented_device("unknown region", 0xed000000, 0x4000);
     create_unimplemented_device("pwm stub", FH_PWM_BASE, REGION_SIZE);
 
     qemu_register_reset(fh_reset, fhs);

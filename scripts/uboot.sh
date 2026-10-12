@@ -12,6 +12,6 @@ sleep 3
 	-m 64M \
 	-d unimp,int,mmu,guest_errors -D errvirdump.log \
 	-icount shift=0 -rtc clock=vm \
-	-kernel ../tendaimages/uboot.dd \
+	-bios ../tendaimages/uboot.dd \
 	-drive file=../tendaimages/firmware.bin,format=raw,if=mtd \
 	-serial stdio -monitor telnet:0.0.0.0:8888,server,nowait
