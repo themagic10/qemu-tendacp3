@@ -1,6 +1,6 @@
 FROM debian:12
 
-EXPOSE 1234 8888
+EXPOSE 1234 8888 2323
 
 ENV QEMU_ROOT="/qemuroot"
 ENV QEMU_SRC="$QEMU_ROOT/qemu"
@@ -31,8 +31,9 @@ WORKDIR $QEMU_ROOT
 CMD $QEMU_SRC/build/qemu-system-arm -s -M fullhan8626v100 \
 	-cpu arm1176 \
 	-m 64M \
-	-d unimp,int,mmu,guest_errors -D errvirdump.log \
+	-d unimp,mmu,guest_errors -D errvirdump.log \
 	-icount shift=0 -rtc clock=vm \
 	-bios $QEMU_IMAGES/uboot.dd \
-	-drive file=$QEMU_IMAGES/firmware.bin,format=raw,if=mtd \
-	-serial stdio -monitor telnet:0.0.0.0:8888,server,nowait
+	-drive file=$QEMU_IMAGES/patched_firmware.bin,format=raw,if=mtd,snapshot=on \
+	-serial stdio -monitor telnet:0.0.0.0:8888,server,nowait \
+	-nic user,net=192.168.1.0/24,host=192.168.1.2,hostfwd=tcp::2323-192.168.1.203:23

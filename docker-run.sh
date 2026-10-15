@@ -1,1 +1,1 @@
-docker run -p 1234:1234 -p 8888:8888 magic/tendacp3qemu
+docker run -p 1234:1234 -p 8888:8888 -p 2323:2323 magic/tendacp3qemu

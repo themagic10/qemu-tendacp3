@@ -4,7 +4,6 @@ set -eo pipefail
 cd "$(dirname "$0")"
 cd ../build/
 
-
 ./qemu-system-arm -s -M fullhan8626v100 \
 	-cpu arm1176 \
 	-m 64M \
